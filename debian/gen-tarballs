@@ -1,0 +1,9 @@
+#!/bin/bash
+
+VERSION=$(dpkg-parsechangelog -S version | cut -d - -f 1 | cut -d : -f 2)
+
+# libpmemcto was dropped as of 1.5 yet there's a reference left.
+tar cfa ../pmdk-convert_$VERSION.orig-nvml.tar.xz $(
+	grep -h 'nvml-[0-9.]\+/src' {,tests/}CMakeLists.txt|
+	sed 's/.*\(nvml-[^ ]*\).*/\1/'|grep -v 1.5/src/libpmemcto|grep -v src/windows|
+	sed 's/)$//'|cut -d/ -f1-3|sort|uniq)

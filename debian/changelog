@@ -1,0 +1,5 @@
+pmdk-convert (1.5.1-1) unstable; urgency=low
+
+  * Initial release. (Closes: #922738)
+
+ -- Adam Borowski <kilobyte@angband.pl>  Wed, 03 Apr 2019 23:18:02 +0200

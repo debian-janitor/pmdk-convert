@@ -1,0 +1,23 @@
+Source: pmdk-convert
+Section: libs
+Priority: optional
+Maintainer: Adam Borowski <kilobyte@angband.pl>
+Build-Depends: debhelper-compat (=12),
+               cmake,
+               gdb,
+Standards-Version: 4.3.0
+Homepage: http://pmem.io/pmdk-convert/
+Vcs-Git: https://github.com/kilobyte/pmdk-convert -b debian
+Vcs-Browser: https://github.com/kilobyte/pmdk-convert/tree/debian
+
+Package: pmdk-convert
+Architecture: amd64 arm64
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: convert pmdk/pmemobj pools to a newer on-memory format
+ The on-memory format of data pools used by libpmemobj is not compatible
+ between major releases, and the library doesn't currently support automatic
+ conversion.  Such upgrades need to be done manually, by this tool.
+
+# Unusual grammar "on-memory" is intentional here.  Saying "in-memory"
+# strongly implies "volatile" to most readers, while "on-disk" is quite
+# wrong for a DIMM.  Better suggestions welcome.

@@ -1,0 +1,86 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: pmdk-convert
+Copyright: 2014-2019, Intel Corporation
+Source: https://github.com/pmem/pmdk-convert
+
+Files: *
+Copyright: 2014-2019, Intel Corporation
+License: BSD-3-clause
+
+Files: nvml-*/src/common/mmap_windows.c
+       nvml-*/src/common/os_*
+       nvml-*/src/set.*
+       nvml-*/src/common/util.h
+       nvml-*/src/libpmem/pmem_windows.c
+       nvml-*/src/tools/pmempool/info_blk.c
+Copyright: 2014-2019, Intel Corporation
+  2015-2017, Microsoft Corporation.
+License: BSD-3-clause
+
+Files: nvml*/src/common/valgrind/memcheck.h
+       nvml*/src/common/valgrind/valgrind.h
+Copyright: 2000-2015 Julian Seward
+License: BSD-3-clause
+
+Files: nvml*/src/common/valgrind/drd.h
+Copyright: 2006-2015 Bart Van Assche <bvanassche@acm.org>
+License: BSD-3-clause
+
+Files: nvml*/src/common/valgrind/helgrind.h
+Copyright: 2007-2015 OpenWorks LLP
+License: BSD-3-clause
+
+Files: nvml/*src/common/queue.h
+Copyright: 1991, 1993 The Regents of the University of California
+           2016, Microsoft Corporation
+License: BSD-3-clause
+
+Files: utils/cstyle
+Copyright: 2008, Sun Microsystems, Inc.
+License: CDDL
+
+Files: utils/check_license
+Copyright: 2016-2019, Intel Corporation
+           2016, Microsoft Corporation
+License: BSD-3-clause
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+   1. Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+ .
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ .
+   3. The name of the author may be used to endorse or promote products
+      derived from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+ EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: CDDL
+ The contents of this file are subject to the terms of the
+ Common Development and Distribution License (the "License").
+ You may not use this file except in compliance with the License.
+ .
+ You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+ or http://www.opensolaris.org/os/licensing.
+ See the License for the specific language governing permissions
+ and limitations under the License.
+ .
+ When distributing Covered Code, include this CDDL HEADER in each
+ file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+ If applicable, add the following below this CDDL HEADER, with the
+ fields enclosed by brackets "[]" replaced with your own identifying
+ information: Portions Copyright [yyyy] [name of copyright owner]
