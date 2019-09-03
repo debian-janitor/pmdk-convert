@@ -36,7 +36,7 @@ project(pmdk-convert C)
 
 set(VERSION_MAJOR 1)
 set(VERSION_MINOR 5)
-set(VERSION_PATCH 1)
+set(VERSION_PATCH 2)
 #set(VERSION_PRERELEASE rc0)
 
 set(VERSION ${VERSION_MAJOR}.${VERSION_MINOR})
@@ -60,6 +60,10 @@ else()
 endif()
 
 set(MAX_VERSION 1.5)
+
+if(MIN_VERSION VERSION_GREATER_EQUAL MAX_VERSION)
+	message(FATAL_ERROR "ERROR: Minimum PMDK version cannot be greater than or equal to maximum PMDK version")
+endif()
 
 STRING(REGEX REPLACE "^([0-9]+)\\.[0-9]+" "\\1" MIN_VERSION_MAJOR "${MIN_VERSION}")
 STRING(REGEX REPLACE "^[0-9]+\\.([0-9]+)" "\\1" MIN_VERSION_MINOR "${MIN_VERSION}")
@@ -270,19 +274,19 @@ function(uncompress file)
 endfunction()
 
 if(BUILD_CONVERT_V5)
-	set(NVML15 1.5.1)
+	set(NVML15 1.5.2)
 
 	set(pkg nvml-${NVML15}.tar.gz)
 	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
 		message(STATUS "Downloading NVML ${NVML15}")
-		file(DOWNLOAD https://github.com/pmem/pmdk/archive/1.5.1.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=501f27e341248e206c8632d7c12007dc7690583f90e081569d6d5786fa3bf1f1)
+		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML15}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
+			EXPECTED_HASH SHA256=a72691971a98b8472b26271f19d69e6c9b849c1ca42124ea2e2bd8c3fcdff1b1)
 		message(STATUS "Downloading NVML ${NVML15} done")
 	endif()
 
 	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/nvml-1.5)
 		uncompress(${pkg})
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-1.5.1 ${CMAKE_SOURCE_DIR}/nvml-1.5)
+		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${NVML15} ${CMAKE_SOURCE_DIR}/nvml-1.5)
 	endif()
 
 
@@ -622,13 +626,13 @@ endif(BUILD_CONVERT_V5)
 ###################################################### 1.4
 if(BUILD_CONVERT_V4)
 
-	set(NVML14 1.4.2)
+	set(NVML14 1.4.3)
 
 	set(pkg nvml-${NVML14}.tar.gz)
 	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
 		message(STATUS "Downloading NVML ${NVML14}")
 		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML14}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=df7e658e75d28cd80f6d2ff7b9fc9ae2885d52f8923fdbacecfd46215115fb4c)
+			EXPECTED_HASH SHA256=93a8ba7383fa02dfd176d50aff56ace6bbac86bbaf26b8b1949ee703a4ec3a31)
 		message(STATUS "Downloading NVML ${NVML14} done")
 	endif()
 
@@ -790,13 +794,13 @@ endif(BUILD_CONVERT_V4)
 ###################################################### 1.3 (tests only)
 if(BUILD_13)
 
-	set(NVML13 1.3.1)
+	set(NVML13 1.3.3)
 
 	set(pkg nvml-${NVML13}.tar.gz)
 	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
 		message(STATUS "Downloading NVML ${NVML13}")
 		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML13}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=0e2a3edbd72e56074c07455f20db4dd981c915c46932efa7902e2d4cbff072c9)
+			EXPECTED_HASH SHA256=5d46497bb151e6a36e801aed45bfef0d068c55cb2267329053e7489e01742f47)
 		message(STATUS "Downloading NVML ${NVML13} done")
 	endif()
 
@@ -902,13 +906,13 @@ endif(BUILD_13)
 
 if(BUILD_CONVERT_V3)
 
-	set(NVML12 1.2.3)
+	set(NVML12 1.2.4)
 
 	set(pkg nvml-${NVML12}.tar.gz)
 	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
 		message(STATUS "Downloading NVML ${NVML12}")
 		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML12}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=7a2c03661a122079906f700d053f9260f9814d18d49218c1b5a8332b17023fc7)
+			EXPECTED_HASH SHA256=aa57b4d969a7582ad5897b5e979b3f2a4015ace7777388227826a65dbf626edd)
 		message(STATUS "Downloading NVML ${NVML12} done")
 	endif()
 
