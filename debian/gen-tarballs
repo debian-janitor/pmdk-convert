@@ -2,8 +2,12 @@
 
 VERSION=$(dpkg-parsechangelog -S version | cut -d - -f 1 | cut -d : -f 2)
 
+rm -f 1.*.tar.gz
 # libpmemcto was dropped as of 1.5 yet there's a reference left.
 tar cfa ../pmdk-convert_$VERSION.orig-nvml.tar.xz $(
-	grep -h 'nvml-[0-9.]\+/src' {,tests/}CMakeLists.txt|
-	sed 's/.*\(nvml-[^ ]*\).*/\1/'|grep -v 1.5/src/libpmemcto|grep -v src/windows|
-	sed 's/)$//'|cut -d/ -f1-3|sort|uniq)
+	grep -h '\${[A-Z0-9_]\+}/src' {,tests/}CMakeLists.txt|
+	sed 's:.*\${MAX_STABLE}/src:'$VERSION'/src:'|
+	sed 's:.*\${VER1\([0-9]\)}/src:1.\1*/src:'|
+	grep -v 1.5/src/libpmemcto|grep -v src/windows|
+	sed 's/)$//'|cut -d/ -f1-3|sort|uniq) \
+	$VERSION/src/test/tools/pmemspoil/spoil.c
