@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <string.h>
 #ifndef _WIN32
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -103,6 +104,12 @@ static const struct {
 #endif
 #if CHECK_VERSION(15)
 	{15, 5},
+#endif
+#if CHECK_VERSION(16)
+	{16, 5},
+#endif
+#if CHECK_VERSION(17)
+	{17, 6},
 #endif
 };
 
@@ -469,7 +476,7 @@ static void
 print_usage()
 {
 	printf(
-		"Usage: pmdk-covert [--version] [--help] [--no-warning] --from=<version> --to=<version> <pool>\n");
+		"Usage: pmdk-convert [--version] [--help] [--no-warning] --from=<version> --to=<version> <pool>\n");
 }
 
 /*
@@ -478,7 +485,15 @@ print_usage()
 static void
 print_version()
 {
-	printf("pmdk-convert 1.4\n");
+	printf("pmdk-convert %d.%d", VERSION_MAJOR, VERSION_MINOR);
+
+	if (VERSION_PATCH)
+		printf(".%d", VERSION_PATCH);
+
+	if (strlen(VERSION_PRERELEASE) > 0)
+		printf("-%s", VERSION_PRERELEASE);
+
+	printf("\n");
 }
 
 /*

@@ -40,10 +40,15 @@ set(DEVICE_DAX_PATHS "" CACHE STRING
 	"for tests that require raw dax devices without a file system. Some tests might require two DAX devices.
 	Example: '/dev/dax1.0 /dev/dax2.0'")
 
+if(WIN32)
+	set(CDB_PATH "" CACHE PATH "requied for windows tests with cdb debugger")
+endif()
+
 set(GLOBAL_TEST_ARGS
 	-DPARENT_DIR=${TEST_DIR}/
 	-DTESTS_USE_FORCED_PMEM=${TESTS_USE_FORCED_PMEM}
-	-DDEVICE_DAX_PATHS=${DEVICE_DAX_PATHS})
+	-DDEVICE_DAX_PATHS=${DEVICE_DAX_PATHS}
+	-DCDB_PATH=${CDB_PATH})
 
 # convert the DEVICE_DAX_PATHS list to the array
 if(DEVICE_DAX_PATHS)
@@ -72,6 +77,17 @@ function(test name file)
 		ENVIRONMENT "LC_ALL=C;PATH=$ENV{PATH}")
 endfunction()
 
+# Finding cdb executable debugger file and setting path to it
+function(set_cdb_executable)
+	if(EXISTS ${CDB_PATH})
+		find_program(CDB_EXE cdb.exe ${CDB_PATH})
+		if(NOT CDB_EXE)
+			message(WARNING "CDB Debugger not found!")
+		endif()
+	else()
+		unset(CDB_EXE)
+	endif()
+endfunction()
 if(WIN32)
 	set(OPEN_SOURCE openW.c)
 	set(CREATE_SOURCE createW.c)
@@ -95,18 +111,24 @@ endif()
 if(BUILD_CONVERT_V4)
 	set(VERSIONS "${VERSIONS} 1.4")
 endif()
-if(BUILD_CONVERT_V5)
+if(BUILD_15)
 	set(VERSIONS "${VERSIONS} 1.5")
+endif()
+if(BUILD_CONVERT_V5)
+	set(VERSIONS "${VERSIONS} 1.6")
+endif()
+if(BUILD_CONVERT_V6)
+	set(VERSIONS "${VERSIONS} 1.7")
 endif()
 
 if(BUILD_CONVERT_V1)
 	add_executable(create_10 ${CREATE_SOURCE})
-	target_include_directories(create_10 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.0/src/include)
+	target_include_directories(create_10 PRIVATE ${CMAKE_SOURCE_DIR}/${VER10}/src/include)
 	target_link_libraries(create_10 PRIVATE libpmem-convert)
 	target_link_libraries(create_10 PRIVATE pmemobj_10)
 
 	add_executable(open_10 open.c)
-	target_include_directories(open_10 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.0/src/include)
+	target_include_directories(open_10 PRIVATE ${CMAKE_SOURCE_DIR}/${VER10}/src/include)
 	target_link_libraries(open_10 PRIVATE libpmem-convert)
 	target_link_libraries(open_10 PRIVATE pmemobj_10)
 
@@ -115,12 +137,12 @@ endif()
 
 if(BUILD_CONVERT_V2)
 	add_executable(create_11 ${CREATE_SOURCE})
-	target_include_directories(create_11 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.1/src/include)
+	target_include_directories(create_11 PRIVATE ${CMAKE_SOURCE_DIR}/${VER11}/src/include)
 	target_link_libraries(create_11 PRIVATE libpmem-convert)
 	target_link_libraries(create_11 PRIVATE pmemobj_11)
 
 	add_executable(open_11 ${OPEN_SOURCE})
-	target_include_directories(open_11 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.1/src/include)
+	target_include_directories(open_11 PRIVATE ${CMAKE_SOURCE_DIR}/${VER11}/src/include)
 	target_link_libraries(open_11 PRIVATE libpmem-convert)
 	target_link_libraries(open_11 PRIVATE pmemobj_11)
 
@@ -129,12 +151,12 @@ endif()
 
 if(BUILD_CONVERT_V3)
 	add_executable(create_12 ${CREATE_SOURCE})
-	target_include_directories(create_12 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.2/src/include)
+	target_include_directories(create_12 PRIVATE ${CMAKE_SOURCE_DIR}/${VER12}/src/include)
 	target_link_libraries(create_12 PRIVATE libpmem-convert)
 	target_link_libraries(create_12 PRIVATE pmemobj_12)
 
 	add_executable(open_12 ${OPEN_SOURCE})
-	target_include_directories(open_12 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.2/src/include)
+	target_include_directories(open_12 PRIVATE ${CMAKE_SOURCE_DIR}/${VER12}/src/include)
 	target_link_libraries(open_12 PRIVATE libpmem-convert)
 	target_link_libraries(open_12 PRIVATE pmemobj_12)
 
@@ -143,12 +165,12 @@ endif()
 
 if(BUILD_13)
 	add_executable(create_13 ${CREATE_SOURCE})
-	target_include_directories(create_13 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.3/src/include)
+	target_include_directories(create_13 PRIVATE ${CMAKE_SOURCE_DIR}/${VER13}/src/include)
 	target_link_libraries(create_13 PRIVATE libpmem-convert)
 	target_link_libraries(create_13 PRIVATE pmemobj_13)
 
 	add_executable(open_13 ${OPEN_SOURCE})
-	target_include_directories(open_13 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.3/src/include)
+	target_include_directories(open_13 PRIVATE ${CMAKE_SOURCE_DIR}/${VER13}/src/include)
 	target_link_libraries(open_13 PRIVATE libpmem-convert)
 	target_link_libraries(open_13 PRIVATE pmemobj_13)
 
@@ -165,12 +187,12 @@ endif()
 
 if(BUILD_CONVERT_V4)
 	add_executable(create_14 ${CREATE_SOURCE})
-	target_include_directories(create_14 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.4/src/include)
+	target_include_directories(create_14 PRIVATE ${CMAKE_SOURCE_DIR}/${VER14}/src/include)
 	target_link_libraries(create_14 PRIVATE libpmem-convert)
 	target_link_libraries(create_14 PRIVATE pmemobj_14)
 
 	add_executable(open_14 ${OPEN_SOURCE})
-	target_include_directories(open_14 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.4/src/include)
+	target_include_directories(open_14 PRIVATE ${CMAKE_SOURCE_DIR}/${VER14}/src/include)
 	target_link_libraries(open_14 PRIVATE libpmem-convert)
 	target_link_libraries(open_14 PRIVATE pmemobj_14)
 
@@ -185,16 +207,18 @@ if(BUILD_CONVERT_V4)
 	endif()
 endif()
 
-if(BUILD_CONVERT_V5)
+if(BUILD_15)
 	add_executable(create_15 ${CREATE_SOURCE})
-	target_include_directories(create_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
+	target_include_directories(create_15 PRIVATE ${CMAKE_SOURCE_DIR}/${VER15}/src/include)
 	target_link_libraries(create_15 PRIVATE libpmem-convert)
 	target_link_libraries(create_15 PRIVATE pmemobj_15)
 
 	add_executable(open_15 ${OPEN_SOURCE})
-	target_include_directories(open_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
+	target_include_directories(open_15 PRIVATE ${CMAKE_SOURCE_DIR}/${VER15}/src/include)
 	target_link_libraries(open_15 PRIVATE libpmem-convert)
 	target_link_libraries(open_15 PRIVATE pmemobj_15)
+
+	test("1.5_pool_conversion" basic15)
 
 	if(WIN32)
 		# on windows dll and executable must be in the same dir
@@ -202,275 +226,358 @@ if(BUILD_CONVERT_V5)
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
 			$<TARGET_FILE:pmemobj_15>
 			$<TARGET_FILE_DIR:open_15>)
+	endif()
+endif()
 
-		add_custom_command(TARGET open_15 POST_BUILD
+if(BUILD_CONVERT_V5)
+	add_executable(create_16 ${CREATE_SOURCE})
+	target_include_directories(create_16 PRIVATE ${CMAKE_SOURCE_DIR}/${VER16}/src/include)
+	target_link_libraries(create_16 PRIVATE libpmem-convert)
+	target_link_libraries(create_16 PRIVATE pmemobj_16)
+
+	add_executable(open_16 ${OPEN_SOURCE})
+	target_include_directories(open_16 PRIVATE ${CMAKE_SOURCE_DIR}/${VER16}/src/include)
+	target_link_libraries(open_16 PRIVATE libpmem-convert)
+	target_link_libraries(open_16 PRIVATE pmemobj_16)
+
+	test("1.6_pool_conversion" basic16)
+
+	if(WIN32)
+		# on windows dll and executable must be in the same dir
+		add_custom_command(TARGET open_16 POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			$<TARGET_FILE_DIR:pmemobj_15>/libpmem-convert.dll
-			$<TARGET_FILE_DIR:open_15>)
+			$<TARGET_FILE:pmemobj_16>
+			$<TARGET_FILE_DIR:open_16>)
+
+		add_custom_command(TARGET open_16 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE_DIR:pmemobj_16>/libpmem-convert.dll
+			$<TARGET_FILE_DIR:open_16>)
+	endif()
+endif()
+
+if(BUILD_CONVERT_V6)
+	add_executable(create_17 ${CREATE_SOURCE})
+	target_include_directories(create_17 PRIVATE ${CMAKE_SOURCE_DIR}/${VER17}/src/include)
+	target_link_libraries(create_17 PRIVATE libpmem-convert)
+	target_link_libraries(create_17 PRIVATE pmemobj_17)
+
+	add_executable(open_17 ${OPEN_SOURCE})
+	target_include_directories(open_17 PRIVATE ${CMAKE_SOURCE_DIR}/${VER17}/src/include)
+	target_link_libraries(open_17 PRIVATE libpmem-convert)
+	target_link_libraries(open_17 PRIVATE pmemobj_17)
+
+	if(WIN32)
+		# on windows dll and executable must be in the same dir
+		add_custom_command(TARGET open_17 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE:pmemobj_17>
+			$<TARGET_FILE_DIR:open_17>)
+
+		add_custom_command(TARGET open_17 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE_DIR:pmemobj_17>/libpmem-convert.dll
+			$<TARGET_FILE_DIR:open_17>)
 	endif()
 
 	set(COMMON_SOURCES
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/badblock.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/file.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/mmap.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/pool_hdr.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/out.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/os_dimm_none.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/set.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/shutdown_state.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/util.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/uuid.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/ctl_sds.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/ctl.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/ctl_prefault.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/alloc.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/badblock.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/file.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/mmap.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/pool_hdr.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/out.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/os_dimm_none.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/set.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/shutdown_state.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/util.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/uuid.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/ctl_cow.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/ctl_fallocate.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/ctl_sds.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/ctl.c
+		${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/ctl_prefault.c
 		)
 
 	if(WIN32)
 		set(COMMON_SOURCES ${COMMON_SOURCES}
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/badblock_none.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/file_windows.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/fs_windows.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/mmap_windows.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/os_deep_windows.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/os_thread_windows.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/os_windows.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/util_windows.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/uuid_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/badblock_none.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/file_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/fs_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/mmap_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/os_deep_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/os_thread_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/os_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/util_windows.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/uuid_windows.c
 			)
 	else()
 		set(COMMON_SOURCES ${COMMON_SOURCES}
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/badblock_ndctl.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/extent_linux.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/file_posix.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/fs_posix.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/mmap_posix.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/os_deep_linux.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/os_posix.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/os_thread_posix.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/util_posix.c
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/common/uuid_linux.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/badblock_ndctl.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/extent_linux.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/file_posix.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/fs_posix.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/mmap_posix.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/os_deep_linux.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/os_posix.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/os_thread_posix.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/util_posix.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common/uuid_linux.c
 			)
 	endif()
 
-	set(BLK_SOURCES
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/blk.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/btt.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/libpmemblk.c
-		${COMMON_SOURCES}
-		)
-
-	if(WIN32)
-		set(BLK_SOURCES ${BLK_SOURCES}
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/libpmemblk_main.c
+	function(build_libpmemblk_17)
+		set(BLK_SOURCES
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/blk.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/btt.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/libpmemblk.c
+			${COMMON_SOURCES}
 			)
-	endif()
 
-	if(MSVC)
-		FILE(READ ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/libpmemblk.def DEFFILE)
-		string(REPLACE "libpmemblk" "pmemblk_15" DEFFILE "${DEFFILE}")
-		FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemblk_15.def "${DEFFILE}")
-		add_library(pmemblk_15 SHARED ${BLK_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/pmemblk_15.def)
-		target_compile_options(pmemblk_15 PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	else()
-		add_library(pmemblk_15 SHARED ${BLK_SOURCES})
-	endif()
+		if(WIN32)
+			set(BLK_SOURCES ${BLK_SOURCES}
+				${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/libpmemblk_main.c
+				)
+		endif()
 
-	target_compile_definitions(pmemblk_15 PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(pmemblk_15 PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmemblk_15 PRIVATE _PMEMBLK_INTRNL)
+		if(MSVC)
+			FILE(READ ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/libpmemblk.def DEFFILE)
+			string(REPLACE "libpmemblk" "pmemblk_17" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemblk_17.def "${DEFFILE}")
+			add_library(pmemblk_17 SHARED ${BLK_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/pmemblk_17.def)
+			target_compile_options(pmemblk_17 PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER17}/src/windows/include/platform.h")
+		else()
+			add_library(pmemblk_17 SHARED ${BLK_SOURCES})
+		endif()
 
-	target_include_directories(pmemblk_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
-	target_include_directories(pmemblk_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk)
-	target_include_directories(pmemblk_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/common)
-	target_include_directories(pmemblk_15 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_compile_definitions(pmemblk_17 PRIVATE SRCVERSION="${MAX_STABLE}")
+		target_compile_definitions(pmemblk_17 PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemblk_17 PRIVATE _PMEMBLK_INTRNL)
 
-	if(WIN32)
-		target_include_directories(pmemblk_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/)
-		target_include_directories(pmemblk_15 PRIVATE ${CMAKE_SOURCE_DIR}/include/)
-	endif()
+		target_include_directories(pmemblk_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/include)
+		target_include_directories(pmemblk_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk)
+		target_include_directories(pmemblk_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common)
+		target_include_directories(pmemblk_17 PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	target_link_libraries(pmemblk_15 PRIVATE libpmem-convert)
-	target_link_libraries(pmemblk_15 PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemblk_15 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		if(WIN32)
+			target_include_directories(pmemblk_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/)
+			target_include_directories(pmemblk_17 PRIVATE ${CMAKE_SOURCE_DIR}/include/)
+		endif()
 
-	if(NOT MSVC)
-		target_link_libraries(pmemblk_15 PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/libpmemblk.map)
-	endif()
+		target_link_libraries(pmemblk_17 PRIVATE libpmem-convert)
+		target_link_libraries(pmemblk_17 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemblk_17 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
-	set(LOG_SOURCES
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog/libpmemlog.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog/log.c
-		${COMMON_SOURCES}
-		)
+		if(NOT MSVC)
+			FILE(READ ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/libpmemblk.link.in LINKFILE)
+			if(DEFINED ENV{FAULT_INJECTION})
+				string(REPLACE "fault_injection;" "libpmemblk_inject_fault_at;\n\t\tlibpmemblk_fault_injection_enabled;" LINKFILE "${LINKFILE}")
+			else()
+				string(REPLACE "fault_injection;" "" LINKFILE "${LINKFILE}")
+			endif()
+			FILE(WRITE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/libpmemblk.link "${LINKFILE}")
+			target_link_libraries(pmemblk_17 PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/libpmemblk.link)
+		endif()
+	endfunction(build_libpmemblk_17)
 
-	if(WIN32)
-		set(LOG_SOURCES ${LOG_SOURCES}
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog/libpmemlog_main.c
+	build_libpmemblk_17()
+
+	function(build_libpmemlog_17)
+		set(LOG_SOURCES
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog/libpmemlog.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog/log.c
+			${COMMON_SOURCES}
 			)
-	endif()
 
-	if(MSVC)
-		FILE(READ ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog/libpmemlog.def DEFFILE)
-		string(REPLACE "libpmemlog" "pmemlog_15" DEFFILE "${DEFFILE}")
-		FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemlog_15.def "${DEFFILE}")
-		add_library(pmemlog_15 SHARED ${LOG_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/pmemlog_15.def)
-		target_compile_options(pmemlog_15 PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	else()
-		add_library(pmemlog_15 SHARED ${LOG_SOURCES})
-	endif()
+		if(WIN32)
+			set(LOG_SOURCES ${LOG_SOURCES}
+				${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog/libpmemlog_main.c
+				)
+		endif()
 
-	target_compile_definitions(pmemlog_15 PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(pmemlog_15 PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmemlog_15 PRIVATE _PMEMLOG_INTRNL)
+		if(MSVC)
+			FILE(READ ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog/libpmemlog.def DEFFILE)
+			string(REPLACE "libpmemlog" "pmemlog_17" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemlog_17.def "${DEFFILE}")
+			add_library(pmemlog_17 SHARED ${LOG_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/pmemlog_17.def)
+			target_compile_options(pmemlog_17 PRIVATE /FI"${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/platform.h")
+		else()
+			add_library(pmemlog_17 SHARED ${LOG_SOURCES})
+		endif()
 
-	target_include_directories(pmemlog_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
-	target_include_directories(pmemlog_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog)
-	target_include_directories(pmemlog_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/common)
-	target_include_directories(pmemlog_15 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_compile_definitions(pmemlog_17 PRIVATE SRCVERSION="${MAX_STABLE}")
+		target_compile_definitions(pmemlog_17 PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemlog_17 PRIVATE _PMEMLOG_INTRNL)
 
-	if(WIN32)
-		target_include_directories(pmemlog_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/)
-		target_include_directories(pmemlog_15 PRIVATE ${CMAKE_SOURCE_DIR}/include/)
-	endif()
+		target_include_directories(pmemlog_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/include)
+		target_include_directories(pmemlog_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog)
+		target_include_directories(pmemlog_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common)
+		target_include_directories(pmemlog_17 PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	target_link_libraries(pmemlog_15 PRIVATE libpmem-convert)
-	target_link_libraries(pmemlog_15 PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemlog_15 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		if(WIN32)
+			target_include_directories(pmemlog_17 PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/)
+			target_include_directories(pmemlog_17 PRIVATE ${CMAKE_SOURCE_DIR}/include/)
+		endif()
 
-	if(NOT MSVC)
-		target_link_libraries(pmemlog_15 PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog/libpmemlog.map)
-	endif()
+		target_link_libraries(pmemlog_17 PRIVATE libpmem-convert)
+		target_link_libraries(pmemlog_17 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemlog_17 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
-	set(PMEMSPOIL_SOURCES
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/test/tools/pmemspoil/spoil.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/common.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/btt.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/output.c
-		${COMMON_SOURCES}
-		)
+		if(NOT MSVC)
+			FILE(READ ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog/libpmemlog.link.in LINKFILE)
+			if(DEFINED ENV{FAULT_INJECTION})
+				string(REPLACE "fault_injection;" "libpmemblk_inject_fault_at;\n\t\tlibpmemblk_fault_injection_enabled;" LINKFILE "${LINKFILE}")
+			else()
+				string(REPLACE "fault_injection;" "" LINKFILE "${LINKFILE}")
+			endif()
+			FILE(WRITE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog/libpmemlog.link "${LINKFILE}")
+			target_link_libraries(pmemlog_17 PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog/libpmemlog.link)
+		endif()
+	endfunction(build_libpmemlog_17)
 
-	if(WIN32)
+	build_libpmemlog_17()
+
+	function(build_pmemspoil)
 		set(PMEMSPOIL_SOURCES
-			${PMEMSPOIL_SOURCES}
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/getopt/getopt.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/test/tools/pmemspoil/spoil.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/common.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/btt.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/output.c
+			${COMMON_SOURCES}
 			)
-	endif()
 
-	add_executable(pmemspoil ${PMEMSPOIL_SOURCES})
+		if(WIN32)
+			set(PMEMSPOIL_SOURCES
+				${PMEMSPOIL_SOURCES}
+				${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/getopt/getopt.c
+				)
+		endif()
 
-	if(WIN32)
-		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/getopt)
-		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include)
-	endif()
+		add_executable(pmemspoil ${PMEMSPOIL_SOURCES})
 
-	if(MSVC)
-		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/include/)
-		target_compile_options(pmemspoil PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	endif()
+		if(WIN32)
+			target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/getopt)
+			target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include)
+		endif()
 
-	target_compile_definitions(pmemspoil PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(pmemspoil PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmemspoil PRIVATE LIBDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+		if(MSVC)
+			target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/include/)
+			target_compile_options(pmemspoil PRIVATE /FI"${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/platform.h")
+		endif()
 
-	target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
-	target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/common)
-	target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj)
-	target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog)
-	target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk)
-	target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool)
+		target_compile_definitions(pmemspoil PRIVATE SRCVERSION="${MAX_STABLE}")
+		target_compile_definitions(pmemspoil PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemspoil PRIVATE LIBDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
 
-	target_link_libraries(pmemspoil PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmemspoil PRIVATE libpmem-convert)
-	target_link_libraries(pmemspoil PRIVATE pmemobj_15)
+		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/include)
+		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common)
+		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj)
+		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog)
+		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk)
+		target_include_directories(pmemspoil PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool)
 
-	if(WIN32)
-		# on windows dll and executable must be in the same dir
-		add_custom_command(TARGET pmemspoil POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			$<TARGET_FILE:libpmem-convert>
-			$<TARGET_FILE_DIR:pmemspoil>)
-	endif()
+		target_link_libraries(pmemspoil PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemspoil PRIVATE libpmem-convert)
+		target_link_libraries(pmemspoil PRIVATE pmemobj_17)
 
-	set(PMEMPOOL_SOURCES
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/pmempool.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/check.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/common.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/convert.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/create.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/dump.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/feature.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/info.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/info_blk.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/info_obj.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/info_log.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/output.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/rm.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/synchronize.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool/transform.c
+		if(WIN32)
+			# on windows dll and executable must be in the same dir
+			add_custom_command(TARGET pmemspoil POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				$<TARGET_FILE:libpmem-convert>
+				$<TARGET_FILE_DIR:pmemspoil>)
+		endif()
+	endfunction(build_pmemspoil)
 
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk/btt.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/ulog.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/memblock.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/alloc_class.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/memops.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/heap.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/cuckoo.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/bucket.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/recycler.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/container_seglists.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/container_ravl.c
-		${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj/ravl.c
-		${COMMON_SOURCES}
-		)
+	build_pmemspoil()
 
-	if(NOT WIN32)
-		set(PMEMPOOL_SOURCES ${PMEMPOOL_SOURCES}
-			${CMAKE_SOURCE_DIR}/nvml-1.5/src/librpmem/rpmem_util.c)
-	endif()
+	test("spoiled_pool_hdr" spoiled_pool_hdr)
 
-	if(WIN32)
-		add_executable(pmempool-convert ${PMEMPOOL_SOURCES} ${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/getopt/getopt.c)
-		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/getopt/)
-		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/)
-	else()
-		add_executable(pmempool-convert ${PMEMPOOL_SOURCES})
-	endif()
+	function(build_pmempool_convert)
+		set(PMEMPOOL_SOURCES
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/pmempool.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/check.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/common.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/convert.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/create.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/dump.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/feature.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/info.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/info_blk.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/info_obj.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/info_log.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/output.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/rm.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/synchronize.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool/transform.c
 
-	if(MSVC)
-		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/include/)
-		target_compile_options(pmempool-convert PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	endif()
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk/btt.c
 
-	target_compile_definitions(pmempool-convert PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(pmempool-convert PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmempool-convert PRIVATE LIBDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/critnib.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/ulog.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/memblock.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/alloc_class.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/memops.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/heap.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/bucket.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/recycler.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/container_seglists.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/container_ravl.c
+			${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj/ravl.c
+			${COMMON_SOURCES}
+			)
 
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/common)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemlog)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemblk)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmemobj)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmempool)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/rpmem_common)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/librpmem)
-	target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/tools/pmempool)
+		if(NOT WIN32)
+			set(PMEMPOOL_SOURCES ${PMEMPOOL_SOURCES}
+				${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/librpmem/rpmem_util.c)
+		endif()
 
-	target_link_libraries(pmempool-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmempool-convert PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmempool-convert PRIVATE libpmem-convert)
-	target_link_libraries(pmempool-convert PRIVATE libpmempool-convert)
-	target_link_libraries(pmempool-convert PRIVATE pmemobj_15)
-	target_link_libraries(pmempool-convert PRIVATE pmemblk_15)
-	target_link_libraries(pmempool-convert PRIVATE pmemlog_15)
+		if(WIN32)
+			add_executable(pmempool-convert ${PMEMPOOL_SOURCES} ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/getopt/getopt.c)
+			target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/getopt/)
+			target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/)
+		else()
+			add_executable(pmempool-convert ${PMEMPOOL_SOURCES})
+		endif()
 
-	if(WIN32)
-		# on windows dll and executable must be in the same dir
-		add_custom_command(TARGET pmempool-convert POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			$<TARGET_FILE:libpmempool-convert>
-			$<TARGET_FILE_DIR:pmempool-convert>)
-	endif()
-	
+		if(MSVC)
+			target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/include/)
+			target_compile_options(pmempool-convert PRIVATE /FI"${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/platform.h")
+		endif()
+
+		target_compile_definitions(pmempool-convert PRIVATE SRCVERSION="${MAX_STABLE}")
+		target_compile_definitions(pmempool-convert PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmempool-convert PRIVATE LIBDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/include)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/common)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemlog)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemblk)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmemobj)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmempool)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/rpmem_common)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/librpmem)
+		target_include_directories(pmempool-convert PRIVATE ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/tools/pmempool)
+
+		target_link_libraries(pmempool-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmempool-convert PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmempool-convert PRIVATE libpmem-convert)
+		target_link_libraries(pmempool-convert PRIVATE libpmempool-convert)
+		target_link_libraries(pmempool-convert PRIVATE pmemobj_17)
+		target_link_libraries(pmempool-convert PRIVATE pmemblk_17)
+		target_link_libraries(pmempool-convert PRIVATE pmemlog_17)
+
+		if(WIN32)
+			# on windows dll and executable must be in the same dir
+			add_custom_command(TARGET pmempool-convert POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				$<TARGET_FILE:libpmempool-convert>
+				$<TARGET_FILE_DIR:pmempool-convert>)
+		endif()
+	endfunction(build_pmempool_convert)
+
+	build_pmempool_convert()
+
 	test("compare_replicas" compare_replicas)
 endif()
 
@@ -478,7 +585,7 @@ if(NOT WIN32)
 	if(BUILD_CONVERT_V1)
 		add_executable(transaction_10 transaction.c)
 		disable_optimization(transaction_10)
-		target_include_directories(transaction_10 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.0/src/include)
+		target_include_directories(transaction_10 PRIVATE ${CMAKE_SOURCE_DIR}/${VER10}/src/include)
 		target_link_libraries(transaction_10 PRIVATE libpmem-convert)
 		target_link_libraries(transaction_10 PRIVATE pmemobj_10)
 	endif()
@@ -486,7 +593,7 @@ if(NOT WIN32)
 	if(BUILD_CONVERT_V2)
 		add_executable(transaction_11 transaction.c)
 		disable_optimization(transaction_11)
-		target_include_directories(transaction_11 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.1/src/include)
+		target_include_directories(transaction_11 PRIVATE ${CMAKE_SOURCE_DIR}/${VER11}/src/include)
 		target_link_libraries(transaction_11 PRIVATE libpmem-convert)
 		target_link_libraries(transaction_11 PRIVATE pmemobj_11)
 	endif()
@@ -494,7 +601,7 @@ if(NOT WIN32)
 	if(BUILD_CONVERT_V3)
 		add_executable(transaction_12 transaction.c)
 		disable_optimization(transaction_12)
-		target_include_directories(transaction_12 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.2/src/include)
+		target_include_directories(transaction_12 PRIVATE ${CMAKE_SOURCE_DIR}/${VER12}/src/include)
 		target_link_libraries(transaction_12 PRIVATE libpmem-convert)
 		target_link_libraries(transaction_12 PRIVATE pmemobj_12)
 	endif()
@@ -502,40 +609,102 @@ if(NOT WIN32)
 	if(BUILD_13)
 		add_executable(transaction_13 transaction.c)
 		disable_optimization(transaction_13)
-		target_include_directories(transaction_13 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.3/src/include)
+		target_include_directories(transaction_13 PRIVATE ${CMAKE_SOURCE_DIR}/${VER13}/src/include)
 		target_link_libraries(transaction_13 PRIVATE libpmem-convert)
 		target_link_libraries(transaction_13 PRIVATE pmemobj_13)
 	endif()
+endif()
 
+if(BUILD_CONVERT_V4)
+	add_executable(transaction_14 transaction.c)
+	disable_optimization(transaction_14)
+	target_include_directories(transaction_14 PRIVATE ${CMAKE_SOURCE_DIR}/${VER14}/src/include)
+	target_link_libraries(transaction_14 PRIVATE libpmem-convert)
+	target_link_libraries(transaction_14 PRIVATE pmemobj_14)
+endif()
+
+if(BUILD_15)
+	add_executable(transaction_15 transaction.c)
+	disable_optimization(transaction_15)
+	target_include_directories(transaction_15 PRIVATE ${CMAKE_SOURCE_DIR}/${VER15}/src/include)
+	target_link_libraries(transaction_15 PRIVATE libpmem-convert)
+	target_link_libraries(transaction_15 PRIVATE pmemobj_15)
+endif()
+
+if(BUILD_CONVERT_V5)
+	add_executable(transaction_16 transaction.c)
+	disable_optimization(transaction_16)
+	target_include_directories(transaction_16 PRIVATE ${CMAKE_SOURCE_DIR}/${VER16}/src/include)
+	target_link_libraries(transaction_16 PRIVATE libpmem-convert)
+	target_link_libraries(transaction_16 PRIVATE pmemobj_16)
+endif()
+
+if(BUILD_CONVERT_V6)
+	add_executable(transaction_17 transaction.c)
+	disable_optimization(transaction_17)
+	target_include_directories(transaction_17 PRIVATE ${CMAKE_SOURCE_DIR}/${VER17}/src/include)
+	target_link_libraries(transaction_17 PRIVATE libpmem-convert)
+	target_link_libraries(transaction_17 PRIVATE pmemobj_17)
+endif()
+
+if(MSVC)
 	if(BUILD_CONVERT_V4)
-		add_executable(transaction_14 transaction.c)
-		disable_optimization(transaction_14)
-		target_include_directories(transaction_14 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.4/src/include)
-		target_link_libraries(transaction_14 PRIVATE libpmem-convert)
-		target_link_libraries(transaction_14 PRIVATE pmemobj_14)
+		# project has to be compile as c++ project so we need to change the flag
+		SET_SOURCE_FILES_PROPERTIES(transaction.c PROPERTIES LANGUAGE CXX)
+		# on windows dll and executable must be in the same dir
+		add_custom_command(TARGET transaction_14 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE:pmemobj_14>
+			$<TARGET_FILE_DIR:transaction_14>)
+
+		add_custom_command(TARGET transaction_14 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE_DIR:pmemobj_14>/libpmem-convert.dll
+			$<TARGET_FILE_DIR:transaction_14>)
 	endif()
 
 	if(BUILD_CONVERT_V5)
-		add_executable(transaction_15 transaction.c)
-		disable_optimization(transaction_15)
-		target_include_directories(transaction_15 PRIVATE ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
-		target_link_libraries(transaction_15 PRIVATE libpmem-convert)
-		target_link_libraries(transaction_15 PRIVATE pmemobj_15)
+		# project has to be compile as c++ project so we need to change the flag
+		SET_SOURCE_FILES_PROPERTIES(transaction.c PROPERTIES LANGUAGE CXX)
+		# on windows dll and executable must be in the same dir
+		add_custom_command(TARGET transaction_16 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE:pmemobj_16>
+			$<TARGET_FILE_DIR:transaction_16>)
+
+		add_custom_command(TARGET transaction_16 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE_DIR:pmemobj_16>/libpmem-convert.dll
+			$<TARGET_FILE_DIR:transaction_16>)
+	endif()
+
+	if(BUILD_CONVERT_V6)
+		# project has to be compile as c++ project so we need to change the flag
+		SET_SOURCE_FILES_PROPERTIES(transaction.c PROPERTIES LANGUAGE CXX)
+		# on windows dll and executable must be in the same dir
+		add_custom_command(TARGET transaction_17 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE:pmemobj_17>
+			$<TARGET_FILE_DIR:transaction_17>)
+
+		add_custom_command(TARGET transaction_17 POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE_DIR:pmemobj_17>/libpmem-convert.dll
+			$<TARGET_FILE_DIR:transaction_17>)
 	endif()
 endif()
 
 test("cli_test" cli)
 
-if(NOT WIN32)
-	add_executable(clean_pool clean.c)
-	target_include_directories(clean_pool PRIVATE ${LIBPMEMPOOL_INCLUDE_DIRS})
-	target_link_libraries(clean_pool PRIVATE ${LIBPMEMPOOL_LIBRARIES})
+add_executable(clean_pool clean.c)
+target_include_directories(clean_pool PRIVATE ${LIBPMEMPOOL_INCLUDE_DIRS})
+target_link_libraries(clean_pool PRIVATE ${LIBPMEMPOOL_LIBRARIES})
+file(WRITE ${TEST_DIR}/../tx_intr.lock "")
 
+if(NOT WIN32)
 	if(DEVICE_DAX_PATHS)
 		file(WRITE ${TEST_DIR}/../devdax.lock "")
 	endif()
-
-	file(WRITE ${TEST_DIR}/../tx_intr.lock "")
 
 	test("tx_intr_pool_regfile" tx_intr_pool_regfile)
 	test("tx_intr_poolset_local_2regfiles" tx_intr_poolset_local_2regfiles)
@@ -569,9 +738,29 @@ if(NOT WIN32)
 		test("tx_intr_poolset_local_2devdaxes" tx_intr_poolset_local_2devdaxes)
 		test("tx_intr_poolset_local_devdax_rep_devdax"
 			tx_intr_poolset_local_devdax_rep_devdax)
-		test("tx_intr_poolset_local_2devdaxes_rep_2regfiles" 
+		test("tx_intr_poolset_local_2devdaxes_rep_2regfiles"
 			tx_intr_poolset_local_2devdaxes_rep_2regfiles)
 		test("tx_intr_poolset_local_2regfiles_rep_2devdaxes"
 			tx_intr_poolset_local_2regfiles_rep_2devdaxes)
+	endif()
+else()
+	if(CMAKE_BUILD_TYPE STREQUAL Debug OR CMAKE_BUILD_TYPE STREQUAL RelWithDebInfo)
+		set_cdb_executable()
+		if(CDB_EXE)
+			test("tx_intr_pool_regfile" tx_intr_pool_regfile)
+			test("tx_intr_poolset_local_2regfiles" tx_intr_poolset_local_2regfiles)
+			test("tx_intr_poolset_local_regfile" tx_intr_poolset_local_regfile)
+			test("tx_intr_poolset_local_regfile_rep_regfile" tx_intr_poolset_local_regfile_rep_regfile)
+		else()
+			test("tx_intr_pool_regfile_SKIP_BECAUSE_OF_NO_CDB_DEBUGGER" skip_test)
+			test("tx_intr_poolset_local_2regfiles_SKIP_BECAUSE_OF_NO_CDB_DEBUGGER" skip_test)
+			test("tx_intr_poolset_local_regfile_SKIP_BECAUSE_OF_NO_CDB_DEBUGGER" skip_test)
+			test("tx_intr_poolset_local_regfile_rep_regfile_SKIP_BECAUSE_OF_NO_CDB_DEBUGGER" skip_test)
+		endif()
+	else()
+		test("tx_intr_pool_regfile_SKIP_BECAUSE_OF_NO_DEBUG_BUILD_TYPE" skip_test)
+		test("tx_intr_poolset_local_2regfiles_SKIP_BECAUSE_OF_NO_DEBUG_BUILD_TYPE" skip_test)
+		test("tx_intr_poolset_local_regfile_SKIP_BECAUSE_OF_NO_DEBUG_BUILD_TYPE" skip_test)
+		test("tx_intr_poolset_local_regfile_rep_regfile_SKIP_BECAUSE_OF_NO_DEBUG_BUILD_TYPE" skip_test)
 	endif()
 endif()

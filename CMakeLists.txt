@@ -32,11 +32,11 @@
 include(${CMAKE_SOURCE_DIR}/utils/utils.cmake)
 
 cmake_minimum_required(VERSION 3.3)
-project(pmdk-convert C)
+project(pmdk-convert C CXX)
 
 set(VERSION_MAJOR 1)
-set(VERSION_MINOR 5)
-set(VERSION_PATCH 2)
+set(VERSION_MINOR 7)
+set(VERSION_PATCH 0)
 #set(VERSION_PRERELEASE rc0)
 
 set(VERSION ${VERSION_MAJOR}.${VERSION_MINOR})
@@ -59,7 +59,8 @@ else()
 	set(MIN_VERSION 1.0 CACHE STRING "First supported version (major.minor)")
 endif()
 
-set(MAX_VERSION 1.5)
+set(MAX_VERSION 1.7)
+set(MAX_STABLE 1.7)
 
 if(MIN_VERSION VERSION_GREATER_EQUAL MAX_VERSION)
 	message(FATAL_ERROR "ERROR: Minimum PMDK version cannot be greater than or equal to maximum PMDK version")
@@ -156,7 +157,7 @@ function(version_supported ver ver_next RESULT)
 		set(${RESULT} 0 PARENT_SCOPE)
 		return()
 	endif()
-	if (${ver_next} VERSION_GREATER ${MAX_VERSION} )
+	if (${ver_next} VERSION_GREATER ${MAX_VERSION})
 		set(${RESULT} 0 PARENT_SCOPE)
 		return()
 	endif()
@@ -164,16 +165,53 @@ function(version_supported ver ver_next RESULT)
 	return()
 endfunction(version_supported)
 
-version_supported(1.5 1.5 BUILD_CONVERT_V5)
-version_supported(1.4 1.5 BUILD_CONVERT_V4)
-version_supported(1.2 1.4 BUILD_CONVERT_V3)
-version_supported(1.1 1.2 BUILD_CONVERT_V2)
-version_supported(1.0 1.1 BUILD_CONVERT_V1)
+# disabled by default:
+set(BUILD_13 0)
+set(BUILD_15 0)
 
-if (NOT ${MIN_VERSION} VERSION_GREATER "1.3")
+if (${MIN_VERSION} EQUAL 1.0)
+	set(BUILD_CONVERT_V1 1)
+	set(BUILD_CONVERT_V2 1)
+	set(BUILD_CONVERT_V3 1)
 	set(BUILD_13 1)
-else()
-	set(BUILD_13 0)
+	set(BUILD_CONVERT_V4 1)
+	set(BUILD_CONVERT_V5 1)
+	set(BUILD_CONVERT_V6 1)
+	set(BUILD_15 1)
+elseif (${MIN_VERSION} EQUAL 1.1)
+	set(BUILD_CONVERT_V2 1)
+	set(BUILD_CONVERT_V3 1)
+	set(BUILD_13 1)
+	set(BUILD_CONVERT_V4 1)
+	set(BUILD_CONVERT_V5 1)
+	set(BUILD_15 1)
+elseif (${MIN_VERSION} EQUAL 1.2)
+	set(BUILD_CONVERT_V3 1)
+	set(BUILD_13 1)
+	set(BUILD_CONVERT_V4 1)
+	set(BUILD_CONVERT_V5 1)
+	set(BUILD_15 1)
+	set(BUILD_CONVERT_V6 1)
+elseif (${MIN_VERSION} EQUAL 1.3)
+	set(BUILD_13 1)
+	set(BUILD_CONVERT_V4 1)
+	set(BUILD_CONVERT_V5 1)
+	set(BUILD_15 1)
+	set(BUILD_CONVERT_V6 1)
+elseif (${MIN_VERSION} EQUAL 1.4)
+	set(BUILD_CONVERT_V4 1)
+	set(BUILD_CONVERT_V5 1)
+	set(BUILD_15 1)
+	set(BUILD_CONVERT_V6 1)
+elseif (${MIN_VERSION} EQUAL 1.5)
+	set(BUILD_CONVERT_V5 1)
+	set(BUILD_15 1)
+	set(BUILD_CONVERT_V6 1)
+elseif (${MIN_VERSION} EQUAL 1.6)
+	set(BUILD_CONVERT_V5 1)
+	set(BUILD_CONVERT_V6 1)
+elseif (${MIN_VERSION} EQUAL 1.7)
+	set(BUILD_CONVERT_V6 1)
 endif()
 
 add_executable(check_license EXCLUDE_FROM_ALL utils/check_license/check-license.c)
@@ -250,6 +288,10 @@ add_check_whitespace(src)
 add_check_whitespace(other
 	${CMAKE_SOURCE_DIR}/utils/check_license/*.sh
 	${CMAKE_SOURCE_DIR}/README.md
+	${CMAKE_SOURCE_DIR}/CMakeLists.txt
+	${CMAKE_SOURCE_DIR}/tests/CMakeLists.txt
+	${CMAKE_SOURCE_DIR}/*.cmake
+	${CMAKE_SOURCE_DIR}/tests/*.cmake
 	#			${CMAKE_SOURCE_DIR}/utils/*.sh
 	#			${CMAKE_SOURCE_DIR}/*.spec
 	#			${CMAKE_SOURCE_DIR}/debian/*
@@ -273,919 +315,1247 @@ function(uncompress file)
 	endif()
 endfunction()
 
-if(BUILD_CONVERT_V5)
-	set(NVML15 1.5.2)
+function(get_pmdk ver hash dstdir)
+	set(pkg ${CMAKE_SOURCE_DIR}/${ver}.tar.gz)
 
-	set(pkg nvml-${NVML15}.tar.gz)
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
-		message(STATUS "Downloading NVML ${NVML15}")
-		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML15}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=a72691971a98b8472b26271f19d69e6c9b849c1ca42124ea2e2bd8c3fcdff1b1)
-		message(STATUS "Downloading NVML ${NVML15} done")
+	if (EXISTS ${pkg})
+		file(SHA256 ${pkg} pkg_hash)
+		if (NOT ${pkg_hash} STREQUAL ${hash})
+			message(STATUS "Hash for version ${ver} doesn't match the expected value.")
+			if (EXISTS ${CMAKE_SOURCE_DIR}/${dstdir})
+				message(STATUS "Removing ${CMAKE_SOURCE_DIR}/${dstdir}.")
+				file(REMOVE_RECURSE ${CMAKE_SOURCE_DIR}/${dstdir})
+			endif()
+			message(STATUS "Removing ${pkg}.")
+			file(REMOVE ${pkg})
+		endif()
 	endif()
 
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/nvml-1.5)
-		uncompress(${pkg})
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${NVML15} ${CMAKE_SOURCE_DIR}/nvml-1.5)
+	if (NOT EXISTS ${pkg})
+		if (EXISTS ${CMAKE_SOURCE_DIR}/${dstdir})
+			message(STATUS "Removing ${CMAKE_SOURCE_DIR}/${dstdir}.")
+			file(REMOVE_RECURSE ${CMAKE_SOURCE_DIR}/${dstdir})
+		endif()
+
+		message(STATUS "Downloading ${ver}.tar.gz")
+		if (${ver} STREQUAL "1.0" OR ${ver} STREQUAL "1.1")
+			file(DOWNLOAD https://github.com/pmem/pmdk/archive/${ver}.tar.gz ${CMAKE_SOURCE_DIR}/${ver}.tar.gz
+				EXPECTED_HASH SHA256=${hash})
+		else()
+			file(DOWNLOAD https://github.com/pmem/pmdk/releases/download/${ver}/pmdk-${ver}.tar.gz ${CMAKE_SOURCE_DIR}/${ver}.tar.gz
+				EXPECTED_HASH SHA256=${hash})
+		endif()
+		message(STATUS "Downloading ${ver}.tar.gz DONE")
 	endif()
 
+	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${dstdir})
+		message(STATUS "Uncompressing ${ver}.tar.gz")
+		uncompress(${ver}.tar.gz)
+		message(STATUS "Uncompressing ${ver}.tar.gz DONE")
 
-	set(LIBPMEM_SOURCES
-		nvml-1.5/src/common/file.c
-		nvml-1.5/src/common/mmap.c
-		nvml-1.5/src/common/out.c
-		nvml-1.5/src/common/util.c
-		nvml-1.5/src/libpmem/libpmem.c
-		nvml-1.5/src/libpmem/memops_generic.c
-		nvml-1.5/src/libpmem/pmem.c
-		)
-	if (CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64
-		OR CMAKE_SYSTEM_PROCESSOR STREQUAL amd64
-		OR CMAKE_SYSTEM_PROCESSOR STREQUAL AMD64)
-		set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
-			nvml-1.5/src/libpmem/x86_64/init.c
-			nvml-1.5/src/libpmem/x86_64/cpu.c
+		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${ver} ${CMAKE_SOURCE_DIR}/${dstdir})
+	endif()
+endfunction()
+
+
+if(BUILD_CONVERT_V6)
+	set(VER17 1.7)
+
+	get_pmdk(${VER17} 865ce1b422bc83109cb4a63dcff8fd1077eea3617e668faf6a043208d8be03ca ${VER17})
+
+	function(build_libpmem_convert)
+		set(LIBPMEM_SOURCES
+			${MAX_STABLE}/src/common/alloc.c
+			${MAX_STABLE}/src/common/file.c
+			${MAX_STABLE}/src/common/mmap.c
+			${MAX_STABLE}/src/common/out.c
+			${MAX_STABLE}/src/common/util.c
+			${MAX_STABLE}/src/libpmem/libpmem.c
+			${MAX_STABLE}/src/libpmem/memops_generic.c
+			${MAX_STABLE}/src/libpmem/pmem.c
 			)
-	elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
-		set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
-			nvml-1.5/src/libpmem/aarch64/init.c
-			)
-	else()
-		message(FATAL_ERROR "Unknown architecture ${CMAKE_SYSTEM_PROCESSOR}")
-	endif()
-	if(WIN32)
-		set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
-			nvml-1.5/src/libpmem/libpmem_main.c
-			nvml-1.5/src/libpmem/pmem_windows.c
-			nvml-1.5/src/windows/win_mmap.c
-			nvml-1.5/src/common/file_windows.c
-			nvml-1.5/src/common/fs_windows.c
-			nvml-1.5/src/common/mmap_windows.c
-			nvml-1.5/src/common/os_auto_flush_windows.c
-			nvml-1.5/src/common/os_deep_windows.c
-			nvml-1.5/src/common/os_windows.c
-			nvml-1.5/src/common/os_thread_windows.c
-			nvml-1.5/src/common/util_windows.c
-			)
-	else()
-		set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
-			nvml-1.5/src/libpmem/pmem_posix.c
-			nvml-1.5/src/common/file_posix.c
-			nvml-1.5/src/common/fs_posix.c
-			nvml-1.5/src/common/mmap_posix.c
-			nvml-1.5/src/common/os_auto_flush_linux.c
-			nvml-1.5/src/common/os_deep_linux.c
-			nvml-1.5/src/common/os_posix.c
-			nvml-1.5/src/common/os_thread_posix.c
-			nvml-1.5/src/common/util_posix.c
-			)
-	endif()
+		if (CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64
+			OR CMAKE_SYSTEM_PROCESSOR STREQUAL amd64
+			OR CMAKE_SYSTEM_PROCESSOR STREQUAL AMD64)
+			set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
+				${MAX_STABLE}/src/libpmem/x86_64/init.c
+				${MAX_STABLE}/src/libpmem/x86_64/cpu.c
+				)
+		elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
+			set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
+				${MAX_STABLE}/src/libpmem/aarch64/init.c
+				)
+		else()
+			message(FATAL_ERROR "Unknown architecture ${CMAKE_SYSTEM_PROCESSOR}")
+		endif()
 
-	if(MSVC)
-		FILE(READ nvml-1.5/src/libpmem/libpmem.def DEFFILE)
-		string(REPLACE "libpmem" "libpmem-convert" DEFFILE "${DEFFILE}")
-		FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/libpmem.def "${DEFFILE}")
-		add_library(libpmem-convert SHARED ${LIBPMEM_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/libpmem.def)
-		target_link_libraries(libpmem-convert PRIVATE ntdll.lib)
-	else()
-		add_library(libpmem-convert SHARED ${LIBPMEM_SOURCES})
-		target_link_libraries(libpmem-convert PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmem/libpmem.map)
-	endif()
+		if(WIN32)
+			set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
+				${MAX_STABLE}/src/libpmem/libpmem_main.c
+				${MAX_STABLE}/src/libpmem/pmem_windows.c
+				${MAX_STABLE}/src/windows/win_mmap.c
+				${MAX_STABLE}/src/common/file_windows.c
+				${MAX_STABLE}/src/common/fs_windows.c
+				${MAX_STABLE}/src/common/mmap_windows.c
+				${MAX_STABLE}/src/common/os_auto_flush_windows.c
+				${MAX_STABLE}/src/common/os_deep_windows.c
+				${MAX_STABLE}/src/common/os_windows.c
+				${MAX_STABLE}/src/common/os_thread_windows.c
+				${MAX_STABLE}/src/common/util_windows.c
+				)
+		else()
+			set(LIBPMEM_SOURCES ${LIBPMEM_SOURCES}
+				${MAX_STABLE}/src/libpmem/pmem_posix.c
+				${MAX_STABLE}/src/common/file_posix.c
+				${MAX_STABLE}/src/common/fs_posix.c
+				${MAX_STABLE}/src/common/mmap_posix.c
+				${MAX_STABLE}/src/common/os_auto_flush_linux.c
+				${MAX_STABLE}/src/common/os_deep_linux.c
+				${MAX_STABLE}/src/common/os_posix.c
+				${MAX_STABLE}/src/common/os_thread_posix.c
+				${MAX_STABLE}/src/common/util_posix.c
+				)
+		endif()
 
-	# remove lib prefix from library name
-	set_target_properties(libpmem-convert PROPERTIES PREFIX "")
-	target_compile_definitions(libpmem-convert PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(libpmem-convert PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(libpmem-convert PRIVATE _PMEMOBJ_INTRNL)
-	target_compile_definitions(libpmem-convert PRIVATE SSE2_AVAILABLE=0)
-	target_compile_definitions(libpmem-convert PRIVATE AVX_AVAILABLE=0)
-	target_compile_definitions(libpmem-convert PRIVATE AVX512F_AVAILABLE=0)
+		if(MSVC)
+			FILE(READ ${MAX_STABLE}/src/libpmem/libpmem.def DEFFILE)
+			string(REPLACE "libpmem" "libpmem-convert" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/libpmem.def "${DEFFILE}")
+			add_library(libpmem-convert SHARED ${LIBPMEM_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/libpmem.def)
+			target_link_libraries(libpmem-convert PRIVATE ntdll.lib)
+		else()
+			add_library(libpmem-convert SHARED ${LIBPMEM_SOURCES})
+			FILE(READ ${MAX_STABLE}/src/libpmem/libpmem.link.in LINKFILE)
+			string(REPLACE "fault_injection;" "" LINKFILE "${LINKFILE}")
+			FILE(WRITE ${MAX_STABLE}/src/libpmem/libpmem.link "${LINKFILE}")
+			target_link_libraries(libpmem-convert PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmem/libpmem.link)
+		endif()
 
-	target_include_directories(libpmem-convert PRIVATE nvml-1.5/src/include)
-	target_include_directories(libpmem-convert PRIVATE nvml-1.5/src/common)
-	target_include_directories(libpmem-convert PRIVATE nvml-1.5/src/libpmem)
+		# remove lib prefix from library name
+		set_target_properties(libpmem-convert PROPERTIES PREFIX "")
+		target_compile_definitions(libpmem-convert PRIVATE SRCVERSION="${MAX_STABLE}")
+		target_compile_definitions(libpmem-convert PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(libpmem-convert PRIVATE _PMEMOBJ_INTRNL)
+		target_compile_definitions(libpmem-convert PRIVATE SSE2_AVAILABLE=0)
+		target_compile_definitions(libpmem-convert PRIVATE AVX_AVAILABLE=0)
+		target_compile_definitions(libpmem-convert PRIVATE AVX512F_AVAILABLE=0)
 
-	if(MSVC)
-		target_include_directories(libpmem-convert PRIVATE nvml-1.5/src/windows/include/)
-		target_include_directories(libpmem-convert PRIVATE include/)
-		target_compile_options(libpmem-convert PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	endif()
+		target_include_directories(libpmem-convert PRIVATE ${MAX_STABLE}/src/include)
+		target_include_directories(libpmem-convert PRIVATE ${MAX_STABLE}/src/common)
+		target_include_directories(libpmem-convert PRIVATE ${MAX_STABLE}/src/libpmem)
 
-	target_link_libraries(libpmem-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	set(PMEM_INCLUDE_DIRS nvml-1.5/src/include)
+		if(MSVC)
+			target_include_directories(libpmem-convert PRIVATE ${MAX_STABLE}/src/windows/include/)
+			target_include_directories(libpmem-convert PRIVATE include/)
+			target_compile_options(libpmem-convert PRIVATE /FI"${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/platform.h")
+		endif()
+
+		target_link_libraries(libpmem-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+	endfunction(build_libpmem_convert)
+
+	build_libpmem_convert()
+
+	set(PMEM_INCLUDE_DIRS ${MAX_STABLE}/src/include)
 	set(PMEM_LIBRARIES libpmem-convert)
 	install(TARGETS libpmem-convert
 		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pmdk-convert/)
 
-	set(SOURCES_15
-		nvml-1.5/src/libpmemobj/alloc_class.c
-		nvml-1.5/src/libpmemobj/bucket.c
-		nvml-1.5/src/libpmemobj/ctl_debug.c
-		nvml-1.5/src/libpmemobj/container_ravl.c
-		nvml-1.5/src/libpmemobj/container_seglists.c
-		nvml-1.5/src/libpmemobj/cuckoo.c
-		nvml-1.5/src/libpmemobj/heap.c
-		nvml-1.5/src/libpmemobj/lane.c
-		nvml-1.5/src/libpmemobj/libpmemobj.c
-		nvml-1.5/src/libpmemobj/list.c
-		nvml-1.5/src/libpmemobj/memblock.c
-		nvml-1.5/src/libpmemobj/memops.c
-		nvml-1.5/src/libpmemobj/obj.c
-		nvml-1.5/src/libpmemobj/palloc.c
-		nvml-1.5/src/libpmemobj/pmalloc.c
-		nvml-1.5/src/libpmemobj/ravl.c
-		nvml-1.5/src/libpmemobj/recycler.c
-		nvml-1.5/src/libpmemobj/stats.c
-		nvml-1.5/src/libpmemobj/sync.c
-		nvml-1.5/src/libpmemobj/tx.c
-		nvml-1.5/src/libpmemobj/ulog.c
+	function(build_libpmempool_convert)
+		set(LIBPMEMPOOL_SOURCES
+			${MAX_STABLE}/src/libpmempool/check_backup.c
+			${MAX_STABLE}/src/libpmempool/check_bad_blocks.c
+			${MAX_STABLE}/src/libpmempool/check_blk.c
+			${MAX_STABLE}/src/libpmempool/check_btt_info.c
+			${MAX_STABLE}/src/libpmempool/check_btt_map_flog.c
+			${MAX_STABLE}/src/libpmempool/check.c
+			${MAX_STABLE}/src/libpmempool/check_log.c
+			${MAX_STABLE}/src/libpmempool/check_pool_hdr.c
+			${MAX_STABLE}/src/libpmempool/check_sds.c
+			${MAX_STABLE}/src/libpmempool/check_util.c
+			${MAX_STABLE}/src/libpmempool/check_write.c
+			${MAX_STABLE}/src/libpmempool/feature.c
+			${MAX_STABLE}/src/libpmempool/libpmempool.c
+			${MAX_STABLE}/src/libpmempool/pool.c
+			${MAX_STABLE}/src/libpmempool/replica.c
+			${MAX_STABLE}/src/libpmempool/rm.c
+			${MAX_STABLE}/src/libpmempool/sync.c
+			${MAX_STABLE}/src/libpmempool/transform.c
 
-		nvml-1.5/src/common/badblock.c
-		nvml-1.5/src/common/ctl.c
-		nvml-1.5/src/common/ctl_prefault.c
-		nvml-1.5/src/common/ctl_sds.c
-		nvml-1.5/src/common/file.c
-		nvml-1.5/src/common/mmap.c
-		nvml-1.5/src/common/os_dimm_none.c
-		nvml-1.5/src/common/out.c
-		nvml-1.5/src/common/pool_hdr.c
-		nvml-1.5/src/common/set.c
-		nvml-1.5/src/common/shutdown_state.c
-		nvml-1.5/src/common/util.c
-		nvml-1.5/src/common/uuid.c
+			${MAX_STABLE}/src/libpmemblk/btt.c
+
+			${MAX_STABLE}/src/common/alloc.c
+			${MAX_STABLE}/src/common/badblock.c
+			${MAX_STABLE}/src/common/file.c
+			${MAX_STABLE}/src/common/mmap.c
+			${MAX_STABLE}/src/common/pool_hdr.c
+			${MAX_STABLE}/src/common/out.c
+			${MAX_STABLE}/src/common/os_dimm_none.c
+			${MAX_STABLE}/src/common/set.c
+			${MAX_STABLE}/src/common/shutdown_state.c
+			${MAX_STABLE}/src/common/util.c
+			${MAX_STABLE}/src/common/uuid.c
+			)
+
+		if(WIN32)
+			set(LIBPMEMPOOL_SOURCES ${LIBPMEMPOOL_SOURCES}
+				${MAX_STABLE}/src/libpmempool/libpmempool_main.c
+				${MAX_STABLE}/src/common/badblock_none.c
+				${MAX_STABLE}/src/common/file_windows.c
+				${MAX_STABLE}/src/common/fs_windows.c
+				${MAX_STABLE}/src/common/mmap_windows.c
+				${MAX_STABLE}/src/common/os_deep_windows.c
+				${MAX_STABLE}/src/common/os_thread_windows.c
+				${MAX_STABLE}/src/common/os_windows.c
+				${MAX_STABLE}/src/common/util_windows.c
+				${MAX_STABLE}/src/common/uuid_windows.c
+				)
+		else()
+			set(LIBPMEMPOOL_SOURCES ${LIBPMEMPOOL_SOURCES}
+				${MAX_STABLE}/src/common/badblock_ndctl.c
+				${MAX_STABLE}/src/common/extent_linux.c
+				${MAX_STABLE}/src/common/file_posix.c
+				${MAX_STABLE}/src/common/fs_posix.c
+				${MAX_STABLE}/src/common/mmap_posix.c
+				${MAX_STABLE}/src/common/os_deep_linux.c
+				${MAX_STABLE}/src/common/os_posix.c
+				${MAX_STABLE}/src/common/os_thread_posix.c
+				${MAX_STABLE}/src/common/util_posix.c
+				${MAX_STABLE}/src/common/uuid_linux.c
+				)
+		endif()
+
+		if(MSVC)
+			FILE(READ ${MAX_STABLE}/src/libpmempool/libpmempool.def DEFFILE)
+			string(REPLACE "libpmempool" "libpmempool-convert" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/libpmempool.def "${DEFFILE}")
+			add_library(libpmempool-convert SHARED ${LIBPMEMPOOL_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/libpmempool.def)
+		else()
+			FILE(READ ${MAX_STABLE}/src/libpmempool/libpmempool.link.in LINKFILE)
+			string(REPLACE "fault_injection;" "" LINKFILE "${LINKFILE}")
+			FILE(WRITE ${MAX_STABLE}/src/libpmempool/libpmempool.link "${LINKFILE}")
+
+			add_library(libpmempool-convert SHARED ${LIBPMEMPOOL_SOURCES})
+			target_link_libraries(libpmempool-convert PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/libpmempool/libpmempool.link)
+		endif()
+		target_link_libraries(libpmempool-convert PRIVATE libpmem-convert)
+
+		target_compile_definitions(libpmempool-convert PRIVATE SRCVERSION="${MAX_STABLE}")
+		target_compile_definitions(libpmempool-convert PRIVATE PMDK_UTF8_API)
+
+		target_include_directories(libpmempool-convert PRIVATE ${MAX_STABLE}/src/include)
+		target_include_directories(libpmempool-convert PRIVATE ${MAX_STABLE}/src/common)
+		target_include_directories(libpmempool-convert PRIVATE ${MAX_STABLE}/src/libpmempool)
+		target_include_directories(libpmempool-convert PRIVATE ${MAX_STABLE}/src/libpmemblk)
+		target_include_directories(libpmempool-convert PRIVATE ${MAX_STABLE}/src/libpmemlog)
+		target_include_directories(libpmempool-convert PRIVATE ${MAX_STABLE}/src/libpmemobj)
+
+		if(MSVC)
+			target_include_directories(libpmempool-convert PRIVATE ${MAX_STABLE}/src/windows/include/)
+			target_include_directories(libpmempool-convert PRIVATE include/)
+			target_compile_options(libpmempool-convert PRIVATE /FI"${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/windows/include/platform.h")
+		endif()
+
+		target_link_libraries(libpmempool-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+	endfunction(build_libpmempool_convert)
+
+	build_libpmempool_convert()
+
+	set(LIBPMEMPOOL_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/${MAX_STABLE}/src/include)
+	set(LIBPMEMPOOL_LIBRARIES libpmempool-convert)
+
+	set(SOURCES_17
+		${VER17}/src/libpmemobj/alloc_class.c
+		${VER17}/src/libpmemobj/bucket.c
+		${VER17}/src/libpmemobj/critnib.c
+		${VER17}/src/libpmemobj/ctl_debug.c
+		${VER17}/src/libpmemobj/container_ravl.c
+		${VER17}/src/libpmemobj/container_seglists.c
+		${VER17}/src/libpmemobj/heap.c
+		${VER17}/src/libpmemobj/lane.c
+		${VER17}/src/libpmemobj/libpmemobj.c
+		${VER17}/src/libpmemobj/list.c
+		${VER17}/src/libpmemobj/memblock.c
+		${VER17}/src/libpmemobj/memops.c
+		${VER17}/src/libpmemobj/obj.c
+		${VER17}/src/libpmemobj/palloc.c
+		${VER17}/src/libpmemobj/pmalloc.c
+		${VER17}/src/libpmemobj/ravl.c
+		${VER17}/src/libpmemobj/recycler.c
+		${VER17}/src/libpmemobj/stats.c
+		${VER17}/src/libpmemobj/sync.c
+		${VER17}/src/libpmemobj/tx.c
+		${VER17}/src/libpmemobj/ulog.c
+
+		${VER17}/src/common/alloc.c
+		${VER17}/src/common/badblock.c
+		${VER17}/src/common/ctl.c
+		${VER17}/src/common/ctl_cow.c
+		${VER17}/src/common/ctl_fallocate.c
+		${VER17}/src/common/ctl_prefault.c
+		${VER17}/src/common/ctl_sds.c
+		${VER17}/src/common/file.c
+		${VER17}/src/common/mmap.c
+		${VER17}/src/common/os_dimm_none.c
+		${VER17}/src/common/out.c
+		${VER17}/src/common/pool_hdr.c
+		${VER17}/src/common/set.c
+		${VER17}/src/common/shutdown_state.c
+		${VER17}/src/common/util.c
+		${VER17}/src/common/uuid.c
 		)
 
 	if(WIN32)
-		set(SOURCES_15 ${SOURCES_15}
-			nvml-1.5/src/libpmemobj/libpmemobj_main.c
-			nvml-1.5/src/common/badblock_none.c
-			nvml-1.5/src/common/file_windows.c
-			nvml-1.5/src/common/fs_windows.c
-			nvml-1.5/src/common/mmap_windows.c
-			nvml-1.5/src/common/os_deep_windows.c
-			nvml-1.5/src/common/os_windows.c
-			nvml-1.5/src/common/os_thread_windows.c
-			nvml-1.5/src/common/util_windows.c
-			nvml-1.5/src/common/uuid_windows.c
+		set(SOURCES_17 ${SOURCES_17}
+			${VER17}/src/libpmemobj/libpmemobj_main.c
+			${VER17}/src/common/badblock_none.c
+			${VER17}/src/common/file_windows.c
+			${VER17}/src/common/fs_windows.c
+			${VER17}/src/common/mmap_windows.c
+			${VER17}/src/common/os_deep_windows.c
+			${VER17}/src/common/os_windows.c
+			${VER17}/src/common/os_thread_windows.c
+			${VER17}/src/common/util_windows.c
+			${VER17}/src/common/uuid_windows.c
 			)
 	else()
-		set(SOURCES_15 ${SOURCES_15}
-			nvml-1.5/src/common/badblock_ndctl.c
-			nvml-1.5/src/common/extent_linux.c
-			nvml-1.5/src/common/file_posix.c
-			nvml-1.5/src/common/fs_posix.c
-			nvml-1.5/src/common/mmap_posix.c
-			nvml-1.5/src/common/os_deep_linux.c
-			nvml-1.5/src/common/os_posix.c
-			nvml-1.5/src/common/os_thread_posix.c
-			nvml-1.5/src/common/util_posix.c
-			nvml-1.5/src/common/uuid_linux.c
+		set(SOURCES_17 ${SOURCES_17}
+			${VER17}/src/common/badblock_ndctl.c
+			${VER17}/src/common/extent_linux.c
+			${VER17}/src/common/file_posix.c
+			${VER17}/src/common/fs_posix.c
+			${VER17}/src/common/mmap_posix.c
+			${VER17}/src/common/os_deep_linux.c
+			${VER17}/src/common/os_posix.c
+			${VER17}/src/common/os_thread_posix.c
+			${VER17}/src/common/util_posix.c
+			${VER17}/src/common/uuid_linux.c
 			)
 	endif()
+
+	function(build_convert_v6)
+		if(WIN32)
+			set(CONVERT_V6_SOURCES ${VER17}/src/windows/getopt/getopt.c)
+		endif()
+
+		add_library(pmemobj_convert_v6_o OBJECT ${SOURCES_17} ${CONVERT_V6_SOURCES}
+			pmemobj_convert_v6.c
+			${VER17}/src/libpmemblk/btt.c
+			${VER17}/src/tools/pmempool/common.c
+			${VER17}/src/tools/pmempool/output.c)
+
+		target_compile_definitions(pmemobj_convert_v6_o PRIVATE SRCVERSION="${VER17}")
+		target_compile_definitions(pmemobj_convert_v6_o PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_convert_v6_o PRIVATE _PMEMOBJ_INTRNL)
+
+		target_include_directories(pmemobj_convert_v6_o PRIVATE ${VER17}/src/include)
+		target_include_directories(pmemobj_convert_v6_o PRIVATE ${VER17}/src/libpmemobj)
+		target_include_directories(pmemobj_convert_v6_o PRIVATE ${VER17}/src/libpmemlog)
+		target_include_directories(pmemobj_convert_v6_o PRIVATE ${VER17}/src/libpmemblk)
+		target_include_directories(pmemobj_convert_v6_o PRIVATE ${VER17}/src/common)
+		target_include_directories(pmemobj_convert_v6_o PRIVATE ${PMEM_INCLUDE_DIRS})
+
+		if(MSVC)
+			target_include_directories(pmemobj_convert_v6_o PRIVATE ${VER17}/src/windows/include/)
+			target_include_directories(pmemobj_convert_v6_o PRIVATE ${VER17}/src/windows/getopt/)
+			target_include_directories(pmemobj_convert_v6_o PRIVATE include/)
+			target_compile_options(pmemobj_convert_v6_o PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER17}/src/windows/include/platform.h")
+		endif()
+
+		if(MSVC)
+			add_library(pmemobj_convert_v6_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v6_o> ${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert_v6.def)
+		else()
+			add_library(pmemobj_convert_v6_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v6_o>)
+			target_link_libraries(pmemobj_convert_v6_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
+		endif()
+
+		target_link_libraries(pmemobj_convert_v6_shared PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_convert_v6_shared PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_convert_v6_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		if(NOT MSVC)
+			# strip unneeded symbols, requires -fdata-sections -ffunction-sections
+			target_link_libraries(pmemobj_convert_v6_shared PRIVATE -Wl,--gc-sections)
+		endif()
+
+		set_target_properties(pmemobj_convert_v6_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v6)
+		# remove lib prefix from library name
+		set_target_properties(pmemobj_convert_v6_shared PROPERTIES PREFIX "")
+	endfunction(build_convert_v6)
+
+	build_convert_v6()
+
+	install(TARGETS pmemobj_convert_v6_shared
+		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pmdk-convert/)
+
+	function(build_libpmemobj_17)
+		if(MSVC)
+			FILE(READ ${VER17}/src/libpmemobj/libpmemobj.def DEFFILE)
+			string(REPLACE "libpmemobj" "pmemobj_17" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_17.def "${DEFFILE}")
+			add_library(pmemobj_17 SHARED ${SOURCES_17} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_17.def)
+			target_compile_options(pmemobj_17 PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER17}/src/windows/include/platform.h")
+		else()
+			add_library(pmemobj_17 SHARED ${SOURCES_17})
+			disable_optimization(pmemobj_17)
+		endif()
+
+		target_compile_definitions(pmemobj_17 PRIVATE SRCVERSION="${VER17}")
+		target_compile_definitions(pmemobj_17 PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_17 PRIVATE _PMEMOBJ_INTRNL)
+
+		target_include_directories(pmemobj_17 PRIVATE ${VER17}/src/include)
+		target_include_directories(pmemobj_17 PRIVATE ${VER17}/src/libpmemobj)
+		target_include_directories(pmemobj_17 PRIVATE ${VER17}/src/common)
+		target_include_directories(pmemobj_17 PRIVATE ${PMEM_INCLUDE_DIRS})
+
+		if(WIN32)
+			target_include_directories(pmemobj_17 PRIVATE ${VER17}/src/windows/include/)
+			target_include_directories(pmemobj_17 PRIVATE include/)
+		endif()
+
+		target_link_libraries(pmemobj_17 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_17 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_17 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+
+		if(NOT MSVC)
+			FILE(READ ${VER17}/src/libpmemobj/libpmemobj.link.in LINKFILE)
+			string(REPLACE "fault_injection;" "" LINKFILE "${LINKFILE}")
+			FILE(WRITE ${VER17}/src/libpmemobj/libpmemobj.link "${LINKFILE}")
+			target_link_libraries(pmemobj_17 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER17}/src/libpmemobj/libpmemobj.link)
+		endif()
+	endfunction(build_libpmemobj_17)
+
+	build_libpmemobj_17()
+
+endif(BUILD_CONVERT_V6)
+
+# convert V5 and PMDK 1.6
+if(BUILD_CONVERT_V5)
+	set(VER16 1.6.1)
+
+	get_pmdk(${VER16} f263c8301f86ddf8bc5e020909ac52350baedba5c169a1a3a7786df64f129446 ${VER16})
+
+	set(SOURCES_16
+		${VER16}/src/libpmemobj/alloc_class.c
+		${VER16}/src/libpmemobj/bucket.c
+		${VER16}/src/libpmemobj/critnib.c
+		${VER16}/src/libpmemobj/ctl_debug.c
+		${VER16}/src/libpmemobj/container_ravl.c
+		${VER16}/src/libpmemobj/container_seglists.c
+		${VER16}/src/libpmemobj/heap.c
+		${VER16}/src/libpmemobj/lane.c
+		${VER16}/src/libpmemobj/libpmemobj.c
+		${VER16}/src/libpmemobj/list.c
+		${VER16}/src/libpmemobj/memblock.c
+		${VER16}/src/libpmemobj/memops.c
+		${VER16}/src/libpmemobj/obj.c
+		${VER16}/src/libpmemobj/palloc.c
+		${VER16}/src/libpmemobj/pmalloc.c
+		${VER16}/src/libpmemobj/ravl.c
+		${VER16}/src/libpmemobj/recycler.c
+		${VER16}/src/libpmemobj/stats.c
+		${VER16}/src/libpmemobj/sync.c
+		${VER16}/src/libpmemobj/tx.c
+		${VER16}/src/libpmemobj/ulog.c
+
+		${VER16}/src/common/alloc.c
+		${VER16}/src/common/badblock.c
+		${VER16}/src/common/ctl.c
+		${VER16}/src/common/ctl_cow.c
+		${VER16}/src/common/ctl_fallocate.c
+		${VER16}/src/common/ctl_prefault.c
+		${VER16}/src/common/ctl_sds.c
+		${VER16}/src/common/file.c
+		${VER16}/src/common/mmap.c
+		${VER16}/src/common/os_dimm_none.c
+		${VER16}/src/common/out.c
+		${VER16}/src/common/pool_hdr.c
+		${VER16}/src/common/set.c
+		${VER16}/src/common/shutdown_state.c
+		${VER16}/src/common/util.c
+		${VER16}/src/common/uuid.c
+		)
 
 	if(WIN32)
-		set(CONVERT_V5_SOURCES nvml-1.5/src/windows/getopt/getopt.c)
-	endif()
-
-	add_library(pmemobj_convert_v5_o OBJECT ${SOURCES_15} ${CONVERT_V5_SOURCES}
-		pmemobj_convert_v5.c
-		nvml-1.5/src/libpmemblk/btt.c
-		nvml-1.5/src/tools/pmempool/common.c
-		nvml-1.5/src/tools/pmempool/output.c)
-
-	target_compile_definitions(pmemobj_convert_v5_o PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(pmemobj_convert_v5_o PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmemobj_convert_v5_o PRIVATE _PMEMOBJ_INTRNL)
-
-	target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/include)
-	target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/libpmemobj)
-	target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/libpmemlog)
-	target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/libpmemblk)
-	target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/libpmemcto)
-	target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/common)
-	target_include_directories(pmemobj_convert_v5_o PRIVATE ${PMEM_INCLUDE_DIRS})
-
-	if(MSVC)
-		target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/windows/include/)
-		target_include_directories(pmemobj_convert_v5_o PRIVATE nvml-1.5/src/windows/getopt/)
-		target_include_directories(pmemobj_convert_v5_o PRIVATE include/)
-		target_compile_options(pmemobj_convert_v5_o PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	endif()
-
-	if(MSVC)
-		add_library(pmemobj_convert_v5_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v5_o> ${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert_v5.def)
+		set(SOURCES_16 ${SOURCES_16}
+			${VER16}/src/libpmemobj/libpmemobj_main.c
+			${VER16}/src/common/badblock_none.c
+			${VER16}/src/common/file_windows.c
+			${VER16}/src/common/fs_windows.c
+			${VER16}/src/common/mmap_windows.c
+			${VER16}/src/common/os_deep_windows.c
+			${VER16}/src/common/os_windows.c
+			${VER16}/src/common/os_thread_windows.c
+			${VER16}/src/common/util_windows.c
+			${VER16}/src/common/uuid_windows.c
+			)
 	else()
-		add_library(pmemobj_convert_v5_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v5_o>)
-		target_link_libraries(pmemobj_convert_v5_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
+		set(SOURCES_16 ${SOURCES_16}
+			${VER16}/src/common/badblock_ndctl.c
+			${VER16}/src/common/extent_linux.c
+			${VER16}/src/common/file_posix.c
+			${VER16}/src/common/fs_posix.c
+			${VER16}/src/common/mmap_posix.c
+			${VER16}/src/common/os_deep_linux.c
+			${VER16}/src/common/os_posix.c
+			${VER16}/src/common/os_thread_posix.c
+			${VER16}/src/common/util_posix.c
+			${VER16}/src/common/uuid_linux.c
+			)
 	endif()
 
-	target_link_libraries(pmemobj_convert_v5_shared PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_convert_v5_shared PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemobj_convert_v5_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	if(NOT MSVC)
-		# strip unneeded symbols, requires -fdata-sections -ffunction-sections
-		target_link_libraries(pmemobj_convert_v5_shared PRIVATE -Wl,--gc-sections)
-	endif()
+	function(build_convert_v5)
+		if(WIN32)
+			set(CONVERT_V5_SOURCES ${VER16}/src/windows/getopt/getopt.c)
+		endif()
 
-	set_target_properties(pmemobj_convert_v5_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v5)
-	# remove lib prefix from library name
-	set_target_properties(pmemobj_convert_v5_shared PROPERTIES PREFIX "")
+		add_library(pmemobj_convert_v5_o OBJECT ${SOURCES_16} ${CONVERT_V5_SOURCES}
+			pmemobj_convert_v5.c
+			${VER16}/src/libpmemblk/btt.c
+			${VER16}/src/tools/pmempool/common.c
+			${VER16}/src/tools/pmempool/output.c)
+
+		target_compile_definitions(pmemobj_convert_v5_o PRIVATE SRCVERSION="${VER16}")
+		target_compile_definitions(pmemobj_convert_v5_o PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_convert_v5_o PRIVATE _PMEMOBJ_INTRNL)
+
+		target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/include)
+		target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/libpmemobj)
+		target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/libpmemlog)
+		target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/libpmemblk)
+		target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/common)
+		target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/tools/pmempool)
+		target_include_directories(pmemobj_convert_v5_o PRIVATE ${PMEM_INCLUDE_DIRS})
+
+		if(MSVC)
+			target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/windows/include/)
+			target_include_directories(pmemobj_convert_v5_o PRIVATE ${VER16}/src/windows/getopt/)
+			target_include_directories(pmemobj_convert_v5_o PRIVATE include/)
+			target_compile_options(pmemobj_convert_v5_o PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER16}/src/windows/include/platform.h")
+		endif()
+
+		if(MSVC)
+			add_library(pmemobj_convert_v5_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v5_o> ${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert_v5.def)
+		else()
+			add_library(pmemobj_convert_v5_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v5_o>)
+			target_link_libraries(pmemobj_convert_v5_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
+		endif()
+
+		target_link_libraries(pmemobj_convert_v5_shared PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_convert_v5_shared PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_convert_v5_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		if(NOT MSVC)
+			# strip unneeded symbols, requires -fdata-sections -ffunction-sections
+			target_link_libraries(pmemobj_convert_v5_shared PRIVATE -Wl,--gc-sections)
+		endif()
+
+		set_target_properties(pmemobj_convert_v5_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v5)
+		# remove lib prefix from library name
+		set_target_properties(pmemobj_convert_v5_shared PROPERTIES PREFIX "")
+	endfunction(build_convert_v5)
+
+	build_convert_v5()
 
 	install(TARGETS pmemobj_convert_v5_shared
 		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pmdk-convert/)
 
-	if(MSVC)
-		FILE(READ nvml-1.5/src/libpmemobj/libpmemobj.def DEFFILE)
-		string(REPLACE "libpmemobj" "pmemobj_15" DEFFILE "${DEFFILE}")
-		FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_15.def "${DEFFILE}")
-		add_library(pmemobj_15 SHARED ${SOURCES_15} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_15.def)
-		target_compile_options(pmemobj_15 PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	else()
-		add_library(pmemobj_15 SHARED ${SOURCES_15})
-		disable_optimization(pmemobj_15)
-	endif()
+	function(build_libpmemobj_16)
+		if(MSVC)
+			FILE(READ ${VER16}/src/libpmemobj/libpmemobj.def DEFFILE)
+			string(REPLACE "libpmemobj" "pmemobj_16" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_16.def "${DEFFILE}")
+			add_library(pmemobj_16 SHARED ${SOURCES_16} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_16.def)
+			target_compile_options(pmemobj_16 PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER16}/src/windows/include/platform.h")
+		else()
+			add_library(pmemobj_16 SHARED ${SOURCES_16})
+			disable_optimization(pmemobj_16)
+		endif()
 
-	target_compile_definitions(pmemobj_15 PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(pmemobj_15 PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmemobj_15 PRIVATE _PMEMOBJ_INTRNL)
+		target_compile_definitions(pmemobj_16 PRIVATE SRCVERSION="${VER16}")
+		target_compile_definitions(pmemobj_16 PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_16 PRIVATE _PMEMOBJ_INTRNL)
 
-	target_include_directories(pmemobj_15 PRIVATE nvml-1.5/src/include)
-	target_include_directories(pmemobj_15 PRIVATE nvml-1.5/src/libpmemobj)
-	target_include_directories(pmemobj_15 PRIVATE nvml-1.5/src/common)
-	target_include_directories(pmemobj_15 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_include_directories(pmemobj_16 PRIVATE ${VER16}/src/include)
+		target_include_directories(pmemobj_16 PRIVATE ${VER16}/src/libpmemobj)
+		target_include_directories(pmemobj_16 PRIVATE ${VER16}/src/common)
+		target_include_directories(pmemobj_16 PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	if(WIN32)
-		target_include_directories(pmemobj_15 PRIVATE nvml-1.5/src/windows/include/)
-		target_include_directories(pmemobj_15 PRIVATE include/)
-	endif()
+		if(WIN32)
+			target_include_directories(pmemobj_16 PRIVATE ${VER16}/src/windows/include/)
+			target_include_directories(pmemobj_16 PRIVATE include/)
+		endif()
 
-	target_link_libraries(pmemobj_15 PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_15 PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemobj_15 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_16 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_16 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_16 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
-	if(NOT MSVC)
-		target_link_libraries(pmemobj_15 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/nvml-1.5/src/libpmemobj/libpmemobj.map)
-	endif()
+		if(NOT MSVC)
+			FILE(READ ${VER16}/src/libpmemobj/libpmemobj.link.in LINKFILE)
+			string(REPLACE "fault_injection;" "" LINKFILE "${LINKFILE}")
+			FILE(WRITE ${VER16}/src/libpmemobj/libpmemobj.link "${LINKFILE}")
+			target_link_libraries(pmemobj_16 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER16}/src/libpmemobj/libpmemobj.link)
+		endif()
+	endfunction(build_libpmemobj_16)
 
-	set(LIBPMEMPOOL_SOURCES
-		nvml-1.5/src/libpmempool/check_backup.c
-		nvml-1.5/src/libpmempool/check_bad_blocks.c
-		nvml-1.5/src/libpmempool/check_blk.c
-		nvml-1.5/src/libpmempool/check_btt_info.c
-		nvml-1.5/src/libpmempool/check_btt_map_flog.c
-		nvml-1.5/src/libpmempool/check.c
-		nvml-1.5/src/libpmempool/check_log.c
-		nvml-1.5/src/libpmempool/check_pool_hdr.c
-		nvml-1.5/src/libpmempool/check_sds.c
-		nvml-1.5/src/libpmempool/check_util.c
-		nvml-1.5/src/libpmempool/check_write.c
-		nvml-1.5/src/libpmempool/feature.c
-		nvml-1.5/src/libpmempool/libpmempool.c
-		nvml-1.5/src/libpmempool/pool.c
-		nvml-1.5/src/libpmempool/replica.c
-		nvml-1.5/src/libpmempool/rm.c
-		nvml-1.5/src/libpmempool/sync.c
-		nvml-1.5/src/libpmempool/transform.c
+	build_libpmemobj_16()
+endif(BUILD_CONVERT_V5)
 
-		nvml-1.5/src/libpmemblk/btt.c
+###################################################### 1.5
+if(BUILD_15)
+	set(VER15 1.5.2)
 
-		nvml-1.5/src/common/badblock.c
-		nvml-1.5/src/common/file.c
-		nvml-1.5/src/common/mmap.c
-		nvml-1.5/src/common/pool_hdr.c
-		nvml-1.5/src/common/out.c
-		nvml-1.5/src/common/os_dimm_none.c
-		nvml-1.5/src/common/set.c
-		nvml-1.5/src/common/shutdown_state.c
-		nvml-1.5/src/common/util.c
-		nvml-1.5/src/common/uuid.c
+	get_pmdk(${VER15} a72691971a98b8472b26271f19d69e6c9b849c1ca42124ea2e2bd8c3fcdff1b1 ${VER15})
+
+	set(SOURCES_15
+		${VER15}/src/libpmemobj/alloc_class.c
+		${VER15}/src/libpmemobj/bucket.c
+		${VER15}/src/libpmemobj/ctl_debug.c
+		${VER15}/src/libpmemobj/container_ravl.c
+		${VER15}/src/libpmemobj/container_seglists.c
+		${VER15}/src/libpmemobj/cuckoo.c
+		${VER15}/src/libpmemobj/heap.c
+		${VER15}/src/libpmemobj/lane.c
+		${VER15}/src/libpmemobj/libpmemobj.c
+		${VER15}/src/libpmemobj/list.c
+		${VER15}/src/libpmemobj/memblock.c
+		${VER15}/src/libpmemobj/memops.c
+		${VER15}/src/libpmemobj/obj.c
+		${VER15}/src/libpmemobj/palloc.c
+		${VER15}/src/libpmemobj/pmalloc.c
+		${VER15}/src/libpmemobj/ravl.c
+		${VER15}/src/libpmemobj/recycler.c
+		${VER15}/src/libpmemobj/stats.c
+		${VER15}/src/libpmemobj/sync.c
+		${VER15}/src/libpmemobj/tx.c
+		${VER15}/src/libpmemobj/ulog.c
+
+		${VER15}/src/common/badblock.c
+		${VER15}/src/common/ctl.c
+		${VER15}/src/common/ctl_prefault.c
+		${VER15}/src/common/ctl_sds.c
+		${VER15}/src/common/file.c
+		${VER15}/src/common/mmap.c
+		${VER15}/src/common/os_dimm_none.c
+		${VER15}/src/common/out.c
+		${VER15}/src/common/pool_hdr.c
+		${VER15}/src/common/set.c
+		${VER15}/src/common/shutdown_state.c
+		${VER15}/src/common/util.c
+		${VER15}/src/common/uuid.c
 		)
 
 	if(WIN32)
-		set(LIBPMEMPOOL_SOURCES ${LIBPMEMPOOL_SOURCES}
-			nvml-1.5/src/libpmempool/libpmempool_main.c
-			nvml-1.5/src/common/badblock_none.c
-			nvml-1.5/src/common/file_windows.c
-			nvml-1.5/src/common/fs_windows.c
-			nvml-1.5/src/common/mmap_windows.c
-			nvml-1.5/src/common/os_deep_windows.c
-			nvml-1.5/src/common/os_thread_windows.c
-			nvml-1.5/src/common/os_windows.c
-			nvml-1.5/src/common/util_windows.c
-			nvml-1.5/src/common/uuid_windows.c
+		set(SOURCES_15 ${SOURCES_15}
+			${VER15}/src/libpmemobj/libpmemobj_main.c
+			${VER15}/src/common/badblock_none.c
+			${VER15}/src/common/file_windows.c
+			${VER15}/src/common/fs_windows.c
+			${VER15}/src/common/mmap_windows.c
+			${VER15}/src/common/os_deep_windows.c
+			${VER15}/src/common/os_windows.c
+			${VER15}/src/common/os_thread_windows.c
+			${VER15}/src/common/util_windows.c
+			${VER15}/src/common/uuid_windows.c
 			)
 	else()
-		set(LIBPMEMPOOL_SOURCES ${LIBPMEMPOOL_SOURCES}
-			nvml-1.5/src/common/badblock_ndctl.c
-			nvml-1.5/src/common/extent_linux.c
-			nvml-1.5/src/common/file_posix.c
-			nvml-1.5/src/common/fs_posix.c
-			nvml-1.5/src/common/mmap_posix.c
-			nvml-1.5/src/common/os_deep_linux.c
-			nvml-1.5/src/common/os_posix.c
-			nvml-1.5/src/common/os_thread_posix.c
-			nvml-1.5/src/common/util_posix.c
-			nvml-1.5/src/common/uuid_linux.c
+		set(SOURCES_15 ${SOURCES_15}
+			${VER15}/src/common/badblock_ndctl.c
+			${VER15}/src/common/extent_linux.c
+			${VER15}/src/common/file_posix.c
+			${VER15}/src/common/fs_posix.c
+			${VER15}/src/common/mmap_posix.c
+			${VER15}/src/common/os_deep_linux.c
+			${VER15}/src/common/os_posix.c
+			${VER15}/src/common/os_thread_posix.c
+			${VER15}/src/common/util_posix.c
+			${VER15}/src/common/uuid_linux.c
 			)
 	endif()
 
-	if(MSVC)
-		FILE(READ nvml-1.5/src/libpmempool/libpmempool.def DEFFILE)
-		string(REPLACE "libpmempool" "libpmempool-convert" DEFFILE "${DEFFILE}")
-		FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/libpmempool.def "${DEFFILE}")
-		add_library(libpmempool-convert SHARED ${LIBPMEMPOOL_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/libpmempool.def)
-	else()
-		add_library(libpmempool-convert SHARED ${LIBPMEMPOOL_SOURCES})
-		target_link_libraries(libpmempool-convert PRIVATE -Wl,--version-script=${CMAKE_SOURCE_DIR}/nvml-1.5/src/libpmempool/libpmempool.map)
-	endif()
-	target_link_libraries(libpmempool-convert PRIVATE libpmem-convert)
+	function(build_libpmemobj_15)
+		if(MSVC)
+			FILE(READ ${VER15}/src/libpmemobj/libpmemobj.def DEFFILE)
+			string(REPLACE "libpmemobj" "pmemobj_15" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_15.def "${DEFFILE}")
+			add_library(pmemobj_15 SHARED ${SOURCES_15} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_15.def)
+			target_compile_options(pmemobj_15 PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER15}/src/windows/include/platform.h")
+		else()
+			add_library(pmemobj_15 SHARED ${SOURCES_15})
+			disable_optimization(pmemobj_15)
+		endif()
 
-	target_compile_definitions(libpmempool-convert PRIVATE SRCVERSION="${NVML15}")
-	target_compile_definitions(libpmempool-convert PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_15 PRIVATE SRCVERSION="${VER15}")
+		target_compile_definitions(pmemobj_15 PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_15 PRIVATE _PMEMOBJ_INTRNL)
 
-	target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/include)
-	target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/common)
-	target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/libpmempool)
-	target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/libpmemblk)
-	target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/libpmemcto)
-	target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/libpmemlog)
-	target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/libpmemobj)
+		target_include_directories(pmemobj_15 PRIVATE ${VER15}/src/include)
+		target_include_directories(pmemobj_15 PRIVATE ${VER15}/src/libpmemobj)
+		target_include_directories(pmemobj_15 PRIVATE ${VER15}/src/common)
+		target_include_directories(pmemobj_15 PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	if(MSVC)
-		target_include_directories(libpmempool-convert PRIVATE nvml-1.5/src/windows/include/)
-		target_include_directories(libpmempool-convert PRIVATE include/)
-		target_compile_options(libpmempool-convert PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.5/src/windows/include/platform.h")
-	endif()
+		if(WIN32)
+			target_include_directories(pmemobj_15 PRIVATE ${VER15}/src/windows/include/)
+			target_include_directories(pmemobj_15 PRIVATE include/)
+		endif()
 
-	target_link_libraries(libpmempool-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	set(LIBPMEMPOOL_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/nvml-1.5/src/include)
-	set(LIBPMEMPOOL_LIBRARIES libpmempool-convert)
+		target_link_libraries(pmemobj_15 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_15 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_15 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
-endif(BUILD_CONVERT_V5)
+		if(NOT MSVC)
+			target_link_libraries(pmemobj_15 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER15}/src/libpmemobj/libpmemobj.map)
+		endif()
+	endfunction(build_libpmemobj_15)
+
+	build_libpmemobj_15()
+endif()
 
 ###################################################### 1.4
 if(BUILD_CONVERT_V4)
 
-	set(NVML14 1.4.3)
+	set(VER14 1.4.3)
 
-	set(pkg nvml-${NVML14}.tar.gz)
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
-		message(STATUS "Downloading NVML ${NVML14}")
-		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML14}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=93a8ba7383fa02dfd176d50aff56ace6bbac86bbaf26b8b1949ee703a4ec3a31)
-		message(STATUS "Downloading NVML ${NVML14} done")
-	endif()
-
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/nvml-1.4)
-		uncompress(${pkg})
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${NVML14} ${CMAKE_SOURCE_DIR}/nvml-1.4)
-	endif()
+	get_pmdk(${VER14} 93a8ba7383fa02dfd176d50aff56ace6bbac86bbaf26b8b1949ee703a4ec3a31 ${VER14})
 
 	set(SOURCES_14
-		nvml-1.4/src/libpmemobj/alloc_class.c
-		nvml-1.4/src/libpmemobj/bucket.c
-		nvml-1.4/src/libpmemobj/container_ravl.c
-		nvml-1.4/src/libpmemobj/container_seglists.c
-		nvml-1.4/src/libpmemobj/ctl.c
-		nvml-1.4/src/libpmemobj/ctl_global.c
-		nvml-1.4/src/libpmemobj/cuckoo.c
-		nvml-1.4/src/libpmemobj/heap.c
-		nvml-1.4/src/libpmemobj/lane.c
-		nvml-1.4/src/libpmemobj/libpmemobj.c
-		nvml-1.4/src/libpmemobj/list.c
-		nvml-1.4/src/libpmemobj/memblock.c
-		nvml-1.4/src/libpmemobj/memops.c
-		nvml-1.4/src/libpmemobj/obj.c
-		nvml-1.4/src/libpmemobj/palloc.c
-		nvml-1.4/src/libpmemobj/pmalloc.c
-		nvml-1.4/src/libpmemobj/pvector.c
-		nvml-1.4/src/libpmemobj/ravl.c
-		nvml-1.4/src/libpmemobj/recycler.c
-		nvml-1.4/src/libpmemobj/redo.c
-		nvml-1.4/src/libpmemobj/ringbuf.c
-		nvml-1.4/src/libpmemobj/stats.c
-		nvml-1.4/src/libpmemobj/sync.c
-		nvml-1.4/src/libpmemobj/tx.c
+		${VER14}/src/libpmemobj/alloc_class.c
+		${VER14}/src/libpmemobj/bucket.c
+		${VER14}/src/libpmemobj/container_ravl.c
+		${VER14}/src/libpmemobj/container_seglists.c
+		${VER14}/src/libpmemobj/ctl.c
+		${VER14}/src/libpmemobj/ctl_global.c
+		${VER14}/src/libpmemobj/cuckoo.c
+		${VER14}/src/libpmemobj/heap.c
+		${VER14}/src/libpmemobj/lane.c
+		${VER14}/src/libpmemobj/libpmemobj.c
+		${VER14}/src/libpmemobj/list.c
+		${VER14}/src/libpmemobj/memblock.c
+		${VER14}/src/libpmemobj/memops.c
+		${VER14}/src/libpmemobj/obj.c
+		${VER14}/src/libpmemobj/palloc.c
+		${VER14}/src/libpmemobj/pmalloc.c
+		${VER14}/src/libpmemobj/pvector.c
+		${VER14}/src/libpmemobj/ravl.c
+		${VER14}/src/libpmemobj/recycler.c
+		${VER14}/src/libpmemobj/redo.c
+		${VER14}/src/libpmemobj/ringbuf.c
+		${VER14}/src/libpmemobj/stats.c
+		${VER14}/src/libpmemobj/sync.c
+		${VER14}/src/libpmemobj/tx.c
 
-		nvml-1.4/src/common/file.c
-		nvml-1.4/src/common/mmap.c
-		nvml-1.4/src/common/os_dimm_none.c
-		nvml-1.4/src/common/out.c
-		nvml-1.4/src/common/pool_hdr.c
-		nvml-1.4/src/common/set.c
-		nvml-1.4/src/common/shutdown_state.c
-		nvml-1.4/src/common/util.c
-		nvml-1.4/src/common/uuid.c
+		${VER14}/src/common/file.c
+		${VER14}/src/common/mmap.c
+		${VER14}/src/common/os_dimm_none.c
+		${VER14}/src/common/out.c
+		${VER14}/src/common/pool_hdr.c
+		${VER14}/src/common/set.c
+		${VER14}/src/common/shutdown_state.c
+		${VER14}/src/common/util.c
+		${VER14}/src/common/uuid.c
 		)
 
 	if(WIN32)
 		set(SOURCES_14 ${SOURCES_14}
-			nvml-1.4/src/libpmemobj/libpmemobj_main.c
-			nvml-1.4/src/common/file_windows.c
-			nvml-1.4/src/common/fs_windows.c
-			nvml-1.4/src/common/mmap_windows.c
-			nvml-1.4/src/common/os_deep_windows.c
-			nvml-1.4/src/common/os_windows.c
-			nvml-1.4/src/common/os_thread_windows.c
-			nvml-1.4/src/common/util_windows.c
-			nvml-1.4/src/common/uuid_windows.c
+			${VER14}/src/libpmemobj/libpmemobj_main.c
+			${VER14}/src/common/file_windows.c
+			${VER14}/src/common/fs_windows.c
+			${VER14}/src/common/mmap_windows.c
+			${VER14}/src/common/os_deep_windows.c
+			${VER14}/src/common/os_windows.c
+			${VER14}/src/common/os_thread_windows.c
+			${VER14}/src/common/util_windows.c
+			${VER14}/src/common/uuid_windows.c
 			)
 	else()
 		set(SOURCES_14 ${SOURCES_14}
-			nvml-1.4/src/common/file_posix.c
-			nvml-1.4/src/common/fs_posix.c
-			nvml-1.4/src/common/mmap_posix.c
-			nvml-1.4/src/common/os_deep_linux.c
-			nvml-1.4/src/common/os_posix.c
-			nvml-1.4/src/common/os_thread_posix.c
-			nvml-1.4/src/common/util_posix.c
-			nvml-1.4/src/common/uuid_linux.c
+			${VER14}/src/common/file_posix.c
+			${VER14}/src/common/fs_posix.c
+			${VER14}/src/common/mmap_posix.c
+			${VER14}/src/common/os_deep_linux.c
+			${VER14}/src/common/os_posix.c
+			${VER14}/src/common/os_thread_posix.c
+			${VER14}/src/common/util_posix.c
+			${VER14}/src/common/uuid_linux.c
 			)
 	endif()
 
 
 	if(WIN32)
-		set(CONVERT_V4_SOURCES nvml-1.4/src/windows/getopt/getopt.c)
+		set(CONVERT_V4_SOURCES ${VER14}/src/windows/getopt/getopt.c)
 	endif()
 
-	add_library(pmemobj_convert_v4_o OBJECT ${SOURCES_14} ${CONVERT_V4_SOURCES}
-		pmemobj_convert_v4.c
-		nvml-1.4/src/libpmemblk/btt.c
-		nvml-1.4/src/tools/pmempool/common.c
-		nvml-1.4/src/tools/pmempool/output.c)
+	function(build_convert_v4)
+		add_library(pmemobj_convert_v4_o OBJECT ${SOURCES_14} ${CONVERT_V4_SOURCES}
+			pmemobj_convert_v4.c
+			${VER14}/src/libpmemblk/btt.c
+			${VER14}/src/tools/pmempool/common.c
+			${VER14}/src/tools/pmempool/output.c)
 
+		target_compile_definitions(pmemobj_convert_v4_o PRIVATE SRCVERSION="${VER14}")
+		target_compile_definitions(pmemobj_convert_v4_o PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_convert_v4_o PRIVATE _PMEMOBJ_INTRNL)
 
-	target_compile_definitions(pmemobj_convert_v4_o PRIVATE SRCVERSION="${NVML14}")
-	target_compile_definitions(pmemobj_convert_v4_o PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmemobj_convert_v4_o PRIVATE _PMEMOBJ_INTRNL)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/include)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/libpmemobj)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/libpmemlog)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/libpmemblk)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/libpmemcto)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/common)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/tools/pmempool)
+		target_include_directories(pmemobj_convert_v4_o PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/include)
-	target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/libpmemobj)
-	target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/libpmemlog)
-	target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/libpmemblk)
-	target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/libpmemcto)
-	target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/common)
-	target_include_directories(pmemobj_convert_v4_o PRIVATE ${PMEM_INCLUDE_DIRS})
+		if(MSVC)
+			target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/windows/include/)
+			target_include_directories(pmemobj_convert_v4_o PRIVATE ${VER14}/src/windows/getopt/)
+			target_include_directories(pmemobj_convert_v4_o PRIVATE include/)
+			target_compile_options(pmemobj_convert_v4_o PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER14}/src/windows/include/platform.h")
+		endif()
 
-	if(MSVC)
-		target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/windows/include/)
-		target_include_directories(pmemobj_convert_v4_o PRIVATE nvml-1.4/src/windows/getopt/)
-		target_include_directories(pmemobj_convert_v4_o PRIVATE include/)
-		target_compile_options(pmemobj_convert_v4_o PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.4/src/windows/include/platform.h")
-	endif()
+		if(MSVC)
+			add_library(pmemobj_convert_v4_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v4_o> ${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert_v4.def)
+		else()
+			add_library(pmemobj_convert_v4_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v4_o>)
+			target_link_libraries(pmemobj_convert_v4_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
+		endif()
 
-	if(MSVC)
-		add_library(pmemobj_convert_v4_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v4_o> ${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert_v4.def)
-	else()
-		add_library(pmemobj_convert_v4_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v4_o>)
-		target_link_libraries(pmemobj_convert_v4_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
-	endif()
+		target_link_libraries(pmemobj_convert_v4_shared PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_convert_v4_shared PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_convert_v4_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		if(NOT MSVC)
+			# strip unneeded symbols, requires -fdata-sections -ffunction-sections
+			target_link_libraries(pmemobj_convert_v4_shared PRIVATE -Wl,--gc-sections)
+		endif()
 
-	target_link_libraries(pmemobj_convert_v4_shared PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_convert_v4_shared PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemobj_convert_v4_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	if(NOT MSVC)
-		# strip unneeded symbols, requires -fdata-sections -ffunction-sections
-		target_link_libraries(pmemobj_convert_v4_shared PRIVATE -Wl,--gc-sections)
-	endif()
+		set_target_properties(pmemobj_convert_v4_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v4)
+		# remove lib prefix from library name
+		set_target_properties(pmemobj_convert_v4_shared PROPERTIES PREFIX "")
+	endfunction(build_convert_v4)
 
-	set_target_properties(pmemobj_convert_v4_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v4)
-	# remove lib prefix from library name
-	set_target_properties(pmemobj_convert_v4_shared PROPERTIES PREFIX "")
+	build_convert_v4()
 
 	install(TARGETS pmemobj_convert_v4_shared
 		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pmdk-convert/)
 
-	if(MSVC)
-		FILE(READ nvml-1.4/src/libpmemobj/libpmemobj.def DEFFILE)
-		string(REPLACE "libpmemobj" "pmemobj_14" DEFFILE "${DEFFILE}")
-		FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_14.def "${DEFFILE}")
-		add_library(pmemobj_14 SHARED ${SOURCES_14} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_14.def)
-		target_compile_options(pmemobj_14 PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.4/src/windows/include/platform.h")
-	else()
-		add_library(pmemobj_14 SHARED ${SOURCES_14})
-		disable_optimization(pmemobj_14)
-	endif()
+	function(build_libpmemobj_14)
+		if(MSVC)
+			FILE(READ ${VER14}/src/libpmemobj/libpmemobj.def DEFFILE)
+			string(REPLACE "libpmemobj" "pmemobj_14" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_14.def "${DEFFILE}")
+			add_library(pmemobj_14 SHARED ${SOURCES_14} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_14.def)
+			target_compile_options(pmemobj_14 PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER14}/src/windows/include/platform.h")
+		else()
+			add_library(pmemobj_14 SHARED ${SOURCES_14})
+			disable_optimization(pmemobj_14)
+		endif()
 
-	target_compile_definitions(pmemobj_14 PRIVATE SRCVERSION="${NVML14}")
-	target_compile_definitions(pmemobj_14 PRIVATE PMDK_UTF8_API)
-	target_compile_definitions(pmemobj_14 PRIVATE _PMEMOBJ_INTRNL)
+		target_compile_definitions(pmemobj_14 PRIVATE SRCVERSION="${VER14}")
+		target_compile_definitions(pmemobj_14 PRIVATE PMDK_UTF8_API)
+		target_compile_definitions(pmemobj_14 PRIVATE _PMEMOBJ_INTRNL)
 
-	target_include_directories(pmemobj_14 PRIVATE nvml-1.4/src/include)
-	target_include_directories(pmemobj_14 PRIVATE nvml-1.4/src/libpmemobj)
-	target_include_directories(pmemobj_14 PRIVATE nvml-1.4/src/common)
-	target_include_directories(pmemobj_14 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_include_directories(pmemobj_14 PRIVATE ${VER14}/src/include)
+		target_include_directories(pmemobj_14 PRIVATE ${VER14}/src/libpmemobj)
+		target_include_directories(pmemobj_14 PRIVATE ${VER14}/src/common)
+		target_include_directories(pmemobj_14 PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	if(WIN32)
-		target_include_directories(pmemobj_14 PRIVATE nvml-1.4/src/windows/include/)
-		target_include_directories(pmemobj_14 PRIVATE include/)
-	endif()
+		if(WIN32)
+			target_include_directories(pmemobj_14 PRIVATE ${VER14}/src/windows/include/)
+			target_include_directories(pmemobj_14 PRIVATE include/)
+		endif()
 
-	target_link_libraries(pmemobj_14 PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_14 PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemobj_14 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_14 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_14 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_14 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
-	if(NOT MSVC)
-		target_link_libraries(pmemobj_14 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/nvml-1.4/src/libpmemobj/libpmemobj.map)
-	endif()
+		if(NOT MSVC)
+			target_link_libraries(pmemobj_14 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER14}/src/libpmemobj/libpmemobj.map)
+		endif()
+	endfunction(build_libpmemobj_14)
 
+	build_libpmemobj_14()
 endif(BUILD_CONVERT_V4)
 
 ###################################################### 1.3 (tests only)
 if(BUILD_13)
 
-	set(NVML13 1.3.3)
+	set(VER13 1.3.3)
 
-	set(pkg nvml-${NVML13}.tar.gz)
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
-		message(STATUS "Downloading NVML ${NVML13}")
-		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML13}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=5d46497bb151e6a36e801aed45bfef0d068c55cb2267329053e7489e01742f47)
-		message(STATUS "Downloading NVML ${NVML13} done")
-	endif()
-
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/nvml-1.3)
-		uncompress(${pkg})
-
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${NVML13} ${CMAKE_SOURCE_DIR}/nvml-1.3)
-	endif()
+	get_pmdk(${VER13} 5d46497bb151e6a36e801aed45bfef0d068c55cb2267329053e7489e01742f47 ${VER13})
 
 	set(SOURCES_13
-		nvml-1.3/src/libpmemobj/alloc_class.c
-		nvml-1.3/src/libpmemobj/bucket.c
-		nvml-1.3/src/libpmemobj/container_ctree.c
-		nvml-1.3/src/libpmemobj/container_seglists.c
-		nvml-1.3/src/libpmemobj/ctl.c
-		nvml-1.3/src/libpmemobj/ctl_global.c
-		nvml-1.3/src/libpmemobj/ctree.c
-		nvml-1.3/src/libpmemobj/cuckoo.c
-		nvml-1.3/src/libpmemobj/heap.c
-		nvml-1.3/src/libpmemobj/lane.c
-		nvml-1.3/src/libpmemobj/libpmemobj.c
-		nvml-1.3/src/libpmemobj/list.c
-		nvml-1.3/src/libpmemobj/memblock.c
-		nvml-1.3/src/libpmemobj/memops.c
-		nvml-1.3/src/libpmemobj/obj.c
-		nvml-1.3/src/libpmemobj/palloc.c
-		nvml-1.3/src/libpmemobj/pmalloc.c
-		nvml-1.3/src/libpmemobj/pvector.c
-		nvml-1.3/src/libpmemobj/recycler.c
-		nvml-1.3/src/libpmemobj/redo.c
-		nvml-1.3/src/libpmemobj/ringbuf.c
-		nvml-1.3/src/libpmemobj/sync.c
-		nvml-1.3/src/libpmemobj/tx.c
+		${VER13}/src/libpmemobj/alloc_class.c
+		${VER13}/src/libpmemobj/bucket.c
+		${VER13}/src/libpmemobj/container_ctree.c
+		${VER13}/src/libpmemobj/container_seglists.c
+		${VER13}/src/libpmemobj/ctl.c
+		${VER13}/src/libpmemobj/ctl_global.c
+		${VER13}/src/libpmemobj/ctree.c
+		${VER13}/src/libpmemobj/cuckoo.c
+		${VER13}/src/libpmemobj/heap.c
+		${VER13}/src/libpmemobj/lane.c
+		${VER13}/src/libpmemobj/libpmemobj.c
+		${VER13}/src/libpmemobj/list.c
+		${VER13}/src/libpmemobj/memblock.c
+		${VER13}/src/libpmemobj/memops.c
+		${VER13}/src/libpmemobj/obj.c
+		${VER13}/src/libpmemobj/palloc.c
+		${VER13}/src/libpmemobj/pmalloc.c
+		${VER13}/src/libpmemobj/pvector.c
+		${VER13}/src/libpmemobj/recycler.c
+		${VER13}/src/libpmemobj/redo.c
+		${VER13}/src/libpmemobj/ringbuf.c
+		${VER13}/src/libpmemobj/sync.c
+		${VER13}/src/libpmemobj/tx.c
 
-		nvml-1.3/src/common/file.c
-		nvml-1.3/src/common/mmap.c
-		nvml-1.3/src/common/out.c
-		nvml-1.3/src/common/pool_hdr.c
-		nvml-1.3/src/common/set.c
-		nvml-1.3/src/common/util.c
-		nvml-1.3/src/common/uuid.c
+		${VER13}/src/common/file.c
+		${VER13}/src/common/mmap.c
+		${VER13}/src/common/out.c
+		${VER13}/src/common/pool_hdr.c
+		${VER13}/src/common/set.c
+		${VER13}/src/common/util.c
+		${VER13}/src/common/uuid.c
 		)
 
 	if(WIN32)
 		set(SOURCES_13 ${SOURCES_13}
-			nvml-1.3/src/libpmemobj/libpmemobj_main.c
-			nvml-1.3/src/common/file_windows.c
-			nvml-1.3/src/common/mmap_windows.c
-			nvml-1.3/src/common/os_windows.c
-			nvml-1.3/src/common/os_thread_windows.c
-			nvml-1.3/src/common/pool_hdr_windows.c
-			nvml-1.3/src/common/util_windows.c
-			nvml-1.3/src/common/uuid_windows.c
+			${VER13}/src/libpmemobj/libpmemobj_main.c
+			${VER13}/src/common/file_windows.c
+			${VER13}/src/common/mmap_windows.c
+			${VER13}/src/common/os_windows.c
+			${VER13}/src/common/os_thread_windows.c
+			${VER13}/src/common/pool_hdr_windows.c
+			${VER13}/src/common/util_windows.c
+			${VER13}/src/common/uuid_windows.c
 			)
 	else()
 		set(SOURCES_13 ${SOURCES_13}
-			nvml-1.3/src/common/file_linux.c
-			nvml-1.3/src/common/mmap_linux.c
-			nvml-1.3/src/common/os_linux.c
-			nvml-1.3/src/common/os_thread_linux.c
-			nvml-1.3/src/common/pool_hdr_linux.c
-			nvml-1.3/src/common/util_linux.c
-			nvml-1.3/src/common/uuid_linux.c
+			${VER13}/src/common/file_linux.c
+			${VER13}/src/common/mmap_linux.c
+			${VER13}/src/common/os_linux.c
+			${VER13}/src/common/os_thread_linux.c
+			${VER13}/src/common/pool_hdr_linux.c
+			${VER13}/src/common/util_linux.c
+			${VER13}/src/common/uuid_linux.c
 			)
 	endif()
 
-	if(MSVC)
-		FILE(READ nvml-1.3/src/libpmemobj/libpmemobj.def DEFFILE)
-		string(REPLACE "libpmemobj" "pmemobj_13" DEFFILE "${DEFFILE}")
-		FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_13.def "${DEFFILE}")
-		add_library(pmemobj_13 SHARED ${SOURCES_13} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_13.def ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_13.def)
-		target_compile_options(pmemobj_13 PRIVATE /FI"${CMAKE_SOURCE_DIR}/nvml-1.3/src/windows/include/platform.h")
-	else()
-		add_library(pmemobj_13 SHARED ${SOURCES_13})
-		disable_optimization(pmemobj_13)
-	endif()
+	function(build_libpmemobj_13)
+		if(MSVC)
+			FILE(READ ${VER13}/src/libpmemobj/libpmemobj.def DEFFILE)
+			string(REPLACE "libpmemobj" "pmemobj_13" DEFFILE "${DEFFILE}")
+			FILE(WRITE ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_13.def "${DEFFILE}")
+			add_library(pmemobj_13 SHARED ${SOURCES_13} ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_13.def ${CMAKE_CURRENT_BINARY_DIR}/pmemobj_13.def)
+			target_compile_options(pmemobj_13 PRIVATE /FI"${CMAKE_SOURCE_DIR}/${VER13}/src/windows/include/platform.h")
+		else()
+			add_library(pmemobj_13 SHARED ${SOURCES_13})
+			disable_optimization(pmemobj_13)
+		endif()
 
-	target_compile_definitions(pmemobj_13 PRIVATE SRCVERSION="${NVML13}")
-	target_compile_definitions(pmemobj_13 PRIVATE NVML_UTF8_API)
-	target_compile_definitions(pmemobj_13 PRIVATE _PMEMOBJ_INTRNL)
+		target_compile_definitions(pmemobj_13 PRIVATE SRCVERSION="${VER13}")
+		target_compile_definitions(pmemobj_13 PRIVATE NVML_UTF8_API)
+		target_compile_definitions(pmemobj_13 PRIVATE _PMEMOBJ_INTRNL)
 
-	target_include_directories(pmemobj_13 PRIVATE nvml-1.3/src/include)
-	target_include_directories(pmemobj_13 PRIVATE nvml-1.3/src/libpmemobj)
-	target_include_directories(pmemobj_13 PRIVATE nvml-1.3/src/common)
-	target_include_directories(pmemobj_13 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_include_directories(pmemobj_13 PRIVATE ${VER13}/src/include)
+		target_include_directories(pmemobj_13 PRIVATE ${VER13}/src/libpmemobj)
+		target_include_directories(pmemobj_13 PRIVATE ${VER13}/src/common)
+		target_include_directories(pmemobj_13 PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	if(WIN32)
-		target_include_directories(pmemobj_13 PRIVATE nvml-1.3/src/windows/include/)
-		target_include_directories(pmemobj_13 PRIVATE include/)
-	endif()
+		if(WIN32)
+			target_include_directories(pmemobj_13 PRIVATE ${VER13}/src/windows/include/)
+			target_include_directories(pmemobj_13 PRIVATE include/)
+		endif()
 
-	target_link_libraries(pmemobj_13 PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_13 PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemobj_13 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_13 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_13 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_13 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
-	if(NOT MSVC)
-		target_link_libraries(pmemobj_13 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/nvml-1.3/src/libpmemobj/libpmemobj.map)
-	endif()
+		if(NOT MSVC)
+			target_link_libraries(pmemobj_13 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER13}/src/libpmemobj/libpmemobj.map)
+		endif()
+	endfunction(build_libpmemobj_13)
 
+	build_libpmemobj_13()
 endif(BUILD_13)
 
 ###################################################### 1.2
 
 if(BUILD_CONVERT_V3)
 
-	set(NVML12 1.2.4)
+	set(VER12 1.2.4)
 
-	set(pkg nvml-${NVML12}.tar.gz)
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
-		message(STATUS "Downloading NVML ${NVML12}")
-		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML12}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=aa57b4d969a7582ad5897b5e979b3f2a4015ace7777388227826a65dbf626edd)
-		message(STATUS "Downloading NVML ${NVML12} done")
-	endif()
-
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/nvml-1.2)
-		uncompress(${pkg})
-
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${NVML12} ${CMAKE_SOURCE_DIR}/nvml-1.2)
-	endif()
+	get_pmdk(${VER12} aa57b4d969a7582ad5897b5e979b3f2a4015ace7777388227826a65dbf626edd ${VER12})
 
 	set(SOURCES_12
-		nvml-1.2/src/libpmemobj/bucket.c
-		nvml-1.2/src/libpmemobj/ctree.c
-		nvml-1.2/src/libpmemobj/cuckoo.c
-		nvml-1.2/src/libpmemobj/heap.c
-		nvml-1.2/src/libpmemobj/lane.c
-		nvml-1.2/src/libpmemobj/libpmemobj.c
-		nvml-1.2/src/libpmemobj/list.c
-		nvml-1.2/src/libpmemobj/memblock.c
-		nvml-1.2/src/libpmemobj/memops.c
-		nvml-1.2/src/libpmemobj/obj.c
-		nvml-1.2/src/libpmemobj/palloc.c
-		nvml-1.2/src/libpmemobj/pmalloc.c
-		nvml-1.2/src/libpmemobj/pvector.c
-		nvml-1.2/src/libpmemobj/redo.c
-		nvml-1.2/src/libpmemobj/sync.c
-		nvml-1.2/src/libpmemobj/tx.c
+		${VER12}/src/libpmemobj/bucket.c
+		${VER12}/src/libpmemobj/ctree.c
+		${VER12}/src/libpmemobj/cuckoo.c
+		${VER12}/src/libpmemobj/heap.c
+		${VER12}/src/libpmemobj/lane.c
+		${VER12}/src/libpmemobj/libpmemobj.c
+		${VER12}/src/libpmemobj/list.c
+		${VER12}/src/libpmemobj/memblock.c
+		${VER12}/src/libpmemobj/memops.c
+		${VER12}/src/libpmemobj/obj.c
+		${VER12}/src/libpmemobj/palloc.c
+		${VER12}/src/libpmemobj/pmalloc.c
+		${VER12}/src/libpmemobj/pvector.c
+		${VER12}/src/libpmemobj/redo.c
+		${VER12}/src/libpmemobj/sync.c
+		${VER12}/src/libpmemobj/tx.c
 
-		nvml-1.2/src/common/file.c
-		nvml-1.2/src/common/file_linux.c
-		nvml-1.2/src/common/mmap.c
-		nvml-1.2/src/common/mmap_linux.c
-		nvml-1.2/src/common/out.c
-		nvml-1.2/src/common/pool_hdr.c
-		nvml-1.2/src/common/pool_hdr_linux.c
-		nvml-1.2/src/common/set.c
-		nvml-1.2/src/common/util.c
-		nvml-1.2/src/common/uuid.c
-		nvml-1.2/src/common/uuid_linux.c
-		nvml-1.2/src/common/util_linux.c
+		${VER12}/src/common/file.c
+		${VER12}/src/common/file_linux.c
+		${VER12}/src/common/mmap.c
+		${VER12}/src/common/mmap_linux.c
+		${VER12}/src/common/out.c
+		${VER12}/src/common/pool_hdr.c
+		${VER12}/src/common/pool_hdr_linux.c
+		${VER12}/src/common/set.c
+		${VER12}/src/common/util.c
+		${VER12}/src/common/uuid.c
+		${VER12}/src/common/uuid_linux.c
+		${VER12}/src/common/util_linux.c
 		)
 
 	if(WIN32)
-		set(SOURCES_12 ${SOURCES_12} nvml-1.2/src/libpmemobj/libpmemobj_main.c)
+		set(SOURCES_12 ${SOURCES_12} ${VER12}/src/libpmemobj/libpmemobj_main.c)
 	endif()
 
-	add_library(pmemobj_convert_v3_o OBJECT ${SOURCES_12}
-		pmemobj_convert_v3.c
-		nvml-1.2/src/libpmemblk/btt.c
-		nvml-1.2/src/tools/pmempool/common.c)
+	function(build_convert_v3)
+		add_library(pmemobj_convert_v3_o OBJECT ${SOURCES_12}
+			pmemobj_convert_v3.c
+			${VER12}/src/libpmemblk/btt.c
+			${VER12}/src/tools/pmempool/common.c)
 
-	target_compile_definitions(pmemobj_convert_v3_o PRIVATE SRCVERSION="${NVML12}")
-	target_include_directories(pmemobj_convert_v3_o PRIVATE nvml-1.2/src/include)
-	target_include_directories(pmemobj_convert_v3_o PRIVATE nvml-1.2/src/libpmemobj)
-	target_include_directories(pmemobj_convert_v3_o PRIVATE nvml-1.2/src/libpmemlog)
-	target_include_directories(pmemobj_convert_v3_o PRIVATE nvml-1.2/src/libpmemblk)
-	target_include_directories(pmemobj_convert_v3_o PRIVATE nvml-1.2/src/common)
-	target_include_directories(pmemobj_convert_v3_o PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_compile_definitions(pmemobj_convert_v3_o PRIVATE SRCVERSION="${VER12}")
+		target_include_directories(pmemobj_convert_v3_o PRIVATE ${VER12}/src/include)
+		target_include_directories(pmemobj_convert_v3_o PRIVATE ${VER12}/src/libpmemobj)
+		target_include_directories(pmemobj_convert_v3_o PRIVATE ${VER12}/src/libpmemlog)
+		target_include_directories(pmemobj_convert_v3_o PRIVATE ${VER12}/src/libpmemblk)
+		target_include_directories(pmemobj_convert_v3_o PRIVATE ${VER12}/src/common)
+		target_include_directories(pmemobj_convert_v3_o PRIVATE ${VER12}/src/tools/pmempool)
+		target_include_directories(pmemobj_convert_v3_o PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	add_library(pmemobj_convert_v3_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v3_o>)
-	target_link_libraries(pmemobj_convert_v3_shared PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_convert_v3_shared PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemobj_convert_v3_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmemobj_convert_v3_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
-	# strip unneeded symbols, requires -fdata-sections -ffunction-sections
-	target_link_libraries(pmemobj_convert_v3_shared PRIVATE -Wl,--gc-sections)
+		add_library(pmemobj_convert_v3_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v3_o>)
+		target_link_libraries(pmemobj_convert_v3_shared PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_convert_v3_shared PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_convert_v3_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_convert_v3_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
+		# strip unneeded symbols, requires -fdata-sections -ffunction-sections
+		target_link_libraries(pmemobj_convert_v3_shared PRIVATE -Wl,--gc-sections)
 
-	set_target_properties(pmemobj_convert_v3_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v3)
-	set_target_properties(pmemobj_convert_v3_shared PROPERTIES PREFIX "")
+		set_target_properties(pmemobj_convert_v3_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v3)
+		set_target_properties(pmemobj_convert_v3_shared PROPERTIES PREFIX "")
+	endfunction(build_convert_v3)
+
+	build_convert_v3()
 
 	install(TARGETS pmemobj_convert_v3_shared
 		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pmdk-convert/)
 
-	add_library(pmemobj_12 SHARED ${SOURCES_12})
-	disable_optimization(pmemobj_12)
-	target_compile_definitions(pmemobj_12 PRIVATE SRCVERSION="${NVML12}")
-	target_include_directories(pmemobj_12 PRIVATE nvml-1.2/src/include)
-	target_include_directories(pmemobj_12 PRIVATE nvml-1.2/src/libpmemobj)
-	target_include_directories(pmemobj_12 PRIVATE nvml-1.2/src/common)
-	target_include_directories(pmemobj_12 PRIVATE ${PMEM_INCLUDE_DIRS})
-	target_link_libraries(pmemobj_12 PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_12 PRIVATE ${CMAKE_DL_LIBS})
-	target_link_libraries(pmemobj_12 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmemobj_12 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/nvml-1.2/src/libpmemobj/libpmemobj.map)
+	function(build_libpmemobj_12)
+		add_library(pmemobj_12 SHARED ${SOURCES_12})
+		disable_optimization(pmemobj_12)
+		target_compile_definitions(pmemobj_12 PRIVATE SRCVERSION="${VER12}")
+		target_include_directories(pmemobj_12 PRIVATE ${VER12}/src/include)
+		target_include_directories(pmemobj_12 PRIVATE ${VER12}/src/libpmemobj)
+		target_include_directories(pmemobj_12 PRIVATE ${VER12}/src/common)
+		target_include_directories(pmemobj_12 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_link_libraries(pmemobj_12 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_12 PRIVATE ${CMAKE_DL_LIBS})
+		target_link_libraries(pmemobj_12 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_12 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER12}/src/libpmemobj/libpmemobj.map)
+	endfunction(build_libpmemobj_12)
 
+	build_libpmemobj_12()
 endif(BUILD_CONVERT_V3)
 
 ###################################################### 1.1
 
 if(BUILD_CONVERT_V2)
 
-	set(NVML11 1.1)
+	set(VER11 1.1)
 
-	set(pkg nvml-${NVML11}.tar.gz)
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
-		message(STATUS "Downloading NVML ${NVML11}")
-		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML11}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=2d51a356bf0bd61b0259844894223305d5d825af68d51a07aa1d2bc926b65c43)
-		message(STATUS "Downloading NVML ${NVML11} done")
-	endif()
-
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/nvml-1.1)
-		uncompress(${pkg})
-
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${NVML11} ${CMAKE_SOURCE_DIR}/nvml-1.1)
-	endif()
+	get_pmdk(${VER11} 2d51a356bf0bd61b0259844894223305d5d825af68d51a07aa1d2bc926b65c43 ${VER11})
 
 	set(SOURCES_11
-		nvml-1.1/src/libpmemobj/bucket.c
-		nvml-1.1/src/libpmemobj/ctree.c
-		nvml-1.1/src/libpmemobj/cuckoo.c
-		nvml-1.1/src/libpmemobj/heap.c
-		nvml-1.1/src/libpmemobj/lane.c
-		nvml-1.1/src/libpmemobj/libpmemobj.c
-		nvml-1.1/src/libpmemobj/list.c
-		nvml-1.1/src/libpmemobj/memblock.c
-		nvml-1.1/src/libpmemobj/memops.c
-		nvml-1.1/src/libpmemobj/obj.c
-		nvml-1.1/src/libpmemobj/pmalloc.c
-		nvml-1.1/src/libpmemobj/pvector.c
-		nvml-1.1/src/libpmemobj/redo.c
-		nvml-1.1/src/libpmemobj/sync.c
-		nvml-1.1/src/libpmemobj/tx.c
+		${VER11}/src/libpmemobj/bucket.c
+		${VER11}/src/libpmemobj/ctree.c
+		${VER11}/src/libpmemobj/cuckoo.c
+		${VER11}/src/libpmemobj/heap.c
+		${VER11}/src/libpmemobj/lane.c
+		${VER11}/src/libpmemobj/libpmemobj.c
+		${VER11}/src/libpmemobj/list.c
+		${VER11}/src/libpmemobj/memblock.c
+		${VER11}/src/libpmemobj/memops.c
+		${VER11}/src/libpmemobj/obj.c
+		${VER11}/src/libpmemobj/pmalloc.c
+		${VER11}/src/libpmemobj/pvector.c
+		${VER11}/src/libpmemobj/redo.c
+		${VER11}/src/libpmemobj/sync.c
+		${VER11}/src/libpmemobj/tx.c
 
-		nvml-1.1/src/common/out.c
-		nvml-1.1/src/common/set.c
-		nvml-1.1/src/common/set_linux.c
-		nvml-1.1/src/common/util.c
-		nvml-1.1/src/common/util_linux.c
+		${VER11}/src/common/out.c
+		${VER11}/src/common/set.c
+		${VER11}/src/common/set_linux.c
+		${VER11}/src/common/util.c
+		${VER11}/src/common/util_linux.c
 		)
 
 	if(WIN32)
-		set(SOURCES_11 ${SOURCES_11} nvml-1.1/src/libpmemobj/libpmemobj_main.c)
+		set(SOURCES_11 ${SOURCES_11} ${VER11}/src/libpmemobj/libpmemobj_main.c)
 	endif()
 
-	add_library(pmemobj_convert_v2_o OBJECT ${SOURCES_11}
-		pmemobj_convert_v2.c
-		nvml-1.1/src/libpmemblk/btt.c
-		nvml-1.1/src/tools/pmempool/common.c
-		)
+	function(build_convert_v2)
+		add_library(pmemobj_convert_v2_o OBJECT ${SOURCES_11}
+			pmemobj_convert_v2.c
+			${VER11}/src/libpmemblk/btt.c
+			${VER11}/src/tools/pmempool/common.c
+			)
 
-	target_compile_definitions(pmemobj_convert_v2_o PRIVATE SRCVERSION="${NVML11}")
+		target_compile_definitions(pmemobj_convert_v2_o PRIVATE SRCVERSION="${VER11}")
 
-	target_include_directories(pmemobj_convert_v2_o PRIVATE nvml-1.1/src/include)
-	target_include_directories(pmemobj_convert_v2_o PRIVATE nvml-1.1/src/libpmemobj)
-	target_include_directories(pmemobj_convert_v2_o PRIVATE nvml-1.1/src/libpmemlog)
-	target_include_directories(pmemobj_convert_v2_o PRIVATE nvml-1.1/src/libpmemblk)
-	target_include_directories(pmemobj_convert_v2_o PRIVATE nvml-1.1/src/common)
-	target_include_directories(pmemobj_convert_v2_o PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_include_directories(pmemobj_convert_v2_o PRIVATE ${VER11}/src/include)
+		target_include_directories(pmemobj_convert_v2_o PRIVATE ${VER11}/src/libpmemobj)
+		target_include_directories(pmemobj_convert_v2_o PRIVATE ${VER11}/src/libpmemlog)
+		target_include_directories(pmemobj_convert_v2_o PRIVATE ${VER11}/src/libpmemblk)
+		target_include_directories(pmemobj_convert_v2_o PRIVATE ${VER11}/src/common)
+		target_include_directories(pmemobj_convert_v2_o PRIVATE ${VER11}/src/tools/pmempool)
+		target_include_directories(pmemobj_convert_v2_o PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	add_library(pmemobj_convert_v2_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v2_o>)
-	target_link_libraries(pmemobj_convert_v2_shared PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_convert_v2_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmemobj_convert_v2_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
-	# strip unneeded symbols, requires -fdata-sections -ffunction-sections
-	target_link_libraries(pmemobj_convert_v2_shared PRIVATE -Wl,--gc-sections)
+		add_library(pmemobj_convert_v2_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v2_o>)
+		target_link_libraries(pmemobj_convert_v2_shared PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_convert_v2_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_convert_v2_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
+		# strip unneeded symbols, requires -fdata-sections -ffunction-sections
+		target_link_libraries(pmemobj_convert_v2_shared PRIVATE -Wl,--gc-sections)
 
-	set_target_properties(pmemobj_convert_v2_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v2)
-	set_target_properties(pmemobj_convert_v2_shared PROPERTIES PREFIX "")
+		set_target_properties(pmemobj_convert_v2_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v2)
+		set_target_properties(pmemobj_convert_v2_shared PROPERTIES PREFIX "")
+	endfunction(build_convert_v2)
+
+	build_convert_v2()
 
 	install(TARGETS pmemobj_convert_v2_shared
 		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pmdk-convert/)
 
-	add_library(pmemobj_11 SHARED ${SOURCES_11})
-	disable_optimization(pmemobj_11)
-	target_compile_definitions(pmemobj_11 PRIVATE SRCVERSION="${NVML11}")
+	function(build_libpmemobj_11)
+		add_library(pmemobj_11 SHARED ${SOURCES_11})
+		disable_optimization(pmemobj_11)
+		target_compile_definitions(pmemobj_11 PRIVATE SRCVERSION="${VER11}")
 
-	target_include_directories(pmemobj_11 PRIVATE nvml-1.1/src/include)
-	target_include_directories(pmemobj_11 PRIVATE nvml-1.1/src/libpmemobj)
-	target_include_directories(pmemobj_11 PRIVATE nvml-1.1/src/common)
-	target_include_directories(pmemobj_11 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_include_directories(pmemobj_11 PRIVATE ${VER11}/src/include)
+		target_include_directories(pmemobj_11 PRIVATE ${VER11}/src/libpmemobj)
+		target_include_directories(pmemobj_11 PRIVATE ${VER11}/src/common)
+		target_include_directories(pmemobj_11 PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	target_link_libraries(pmemobj_11 PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_11 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmemobj_11 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/nvml-1.1/src/libpmemobj/libpmemobj.map)
+		target_link_libraries(pmemobj_11 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_11 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_11 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER11}/src/libpmemobj/libpmemobj.map)
+	endfunction(build_libpmemobj_11)
 
+	build_libpmemobj_11()
 endif(BUILD_CONVERT_V2)
 
 ###################################################### 1.0
 
 if(BUILD_CONVERT_V1)
 
-	set(NVML10 1.0)
+	set(VER10 1.0)
 
-	set(pkg nvml-${NVML10}.tar.gz)
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${pkg})
-		message(STATUS "Downloading NVML ${NVML10}")
-		file(DOWNLOAD https://github.com/pmem/pmdk/archive/${NVML10}.tar.gz ${CMAKE_SOURCE_DIR}/${pkg}
-			EXPECTED_HASH SHA256=e9c9ed72168047f65fae72808933bfeafd965ed3237ab3fbfb199c362bf5b773)
-		message(STATUS "Downloading NVML ${NVML10} done")
-	endif()
-
-	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/nvml-1.0)
-		uncompress(${pkg})
-
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${NVML10} ${CMAKE_SOURCE_DIR}/nvml-1.0)
-	endif()
+	get_pmdk(${VER10} e9c9ed72168047f65fae72808933bfeafd965ed3237ab3fbfb199c362bf5b773 ${VER10})
 
 	set(SOURCES_10
-		nvml-1.0/src/libpmemobj/bucket.c
-		nvml-1.0/src/libpmemobj/ctree.c
-		nvml-1.0/src/libpmemobj/cuckoo.c
-		nvml-1.0/src/libpmemobj/heap.c
-		nvml-1.0/src/libpmemobj/lane.c
-		nvml-1.0/src/libpmemobj/libpmemobj.c
-		nvml-1.0/src/libpmemobj/list.c
-		nvml-1.0/src/libpmemobj/memops.c
-		nvml-1.0/src/libpmemobj/obj.c
-		nvml-1.0/src/libpmemobj/pmalloc.c
-		nvml-1.0/src/libpmemobj/redo.c
-		nvml-1.0/src/libpmemobj/sync.c
-		nvml-1.0/src/libpmemobj/tx.c
+		${VER10}/src/libpmemobj/bucket.c
+		${VER10}/src/libpmemobj/ctree.c
+		${VER10}/src/libpmemobj/cuckoo.c
+		${VER10}/src/libpmemobj/heap.c
+		${VER10}/src/libpmemobj/lane.c
+		${VER10}/src/libpmemobj/libpmemobj.c
+		${VER10}/src/libpmemobj/list.c
+		${VER10}/src/libpmemobj/memops.c
+		${VER10}/src/libpmemobj/obj.c
+		${VER10}/src/libpmemobj/pmalloc.c
+		${VER10}/src/libpmemobj/redo.c
+		${VER10}/src/libpmemobj/sync.c
+		${VER10}/src/libpmemobj/tx.c
 
-		nvml-1.0/src/common/out.c
-		nvml-1.0/src/common/set.c
-		nvml-1.0/src/common/util.c
+		${VER10}/src/common/out.c
+		${VER10}/src/common/set.c
+		${VER10}/src/common/util.c
 		)
 
-	add_library(pmemobj_convert_v1_o OBJECT ${SOURCES_10}
-		pmemobj_convert_v1.c
-		nvml-1.0/src/tools/pmempool/common.c)
+	function(build_convert_v1)
+		add_library(pmemobj_convert_v1_o OBJECT ${SOURCES_10}
+			pmemobj_convert_v1.c
+			${VER10}/src/tools/pmempool/common.c)
 
-	target_compile_definitions(pmemobj_convert_v1_o PRIVATE SRCVERSION="${NVML10}")
+		target_compile_definitions(pmemobj_convert_v1_o PRIVATE SRCVERSION="${VER10}")
 
-	target_include_directories(pmemobj_convert_v1_o PRIVATE nvml-1.0/src/include)
-	target_include_directories(pmemobj_convert_v1_o PRIVATE nvml-1.0/src/libpmemobj)
-	target_include_directories(pmemobj_convert_v1_o PRIVATE nvml-1.0/src/libpmemlog)
-	target_include_directories(pmemobj_convert_v1_o PRIVATE nvml-1.0/src/libpmemblk)
-	target_include_directories(pmemobj_convert_v1_o PRIVATE nvml-1.0/src/common)
-	target_include_directories(pmemobj_convert_v1_o PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_include_directories(pmemobj_convert_v1_o PRIVATE ${VER10}/src/include)
+		target_include_directories(pmemobj_convert_v1_o PRIVATE ${VER10}/src/libpmemobj)
+		target_include_directories(pmemobj_convert_v1_o PRIVATE ${VER10}/src/libpmemlog)
+		target_include_directories(pmemobj_convert_v1_o PRIVATE ${VER10}/src/libpmemblk)
+		target_include_directories(pmemobj_convert_v1_o PRIVATE ${VER10}/src/common)
+		target_include_directories(pmemobj_convert_v1_o PRIVATE ${VER10}/src/tools/pmempool)
+		target_include_directories(pmemobj_convert_v1_o PRIVATE ${PMEM_INCLUDE_DIRS})
 
-	add_library(pmemobj_convert_v1_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v1_o>)
-	target_link_libraries(pmemobj_convert_v1_shared PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_convert_v1_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmemobj_convert_v1_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
-	# strip unneeded symbols, requires -fdata-sections -ffunction-sections
-	target_link_libraries(pmemobj_convert_v1_shared PRIVATE -Wl,--gc-sections)
+		add_library(pmemobj_convert_v1_shared SHARED $<TARGET_OBJECTS:pmemobj_convert_v1_o>)
+		target_link_libraries(pmemobj_convert_v1_shared PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_convert_v1_shared PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_convert_v1_shared PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/pmemobj_convert.map)
+		# strip unneeded symbols, requires -fdata-sections -ffunction-sections
+		target_link_libraries(pmemobj_convert_v1_shared PRIVATE -Wl,--gc-sections)
 
-	set_target_properties(pmemobj_convert_v1_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v1)
-	set_target_properties(pmemobj_convert_v1_shared PROPERTIES PREFIX "")
+		set_target_properties(pmemobj_convert_v1_shared PROPERTIES OUTPUT_NAME pmemobj_convert_v1)
+		set_target_properties(pmemobj_convert_v1_shared PROPERTIES PREFIX "")
+	endfunction(build_convert_v1)
+
+	build_convert_v1()
 
 	install(TARGETS pmemobj_convert_v1_shared
 		DESTINATION ${CMAKE_INSTALL_LIBDIR}/pmdk-convert/)
 
-	add_library(pmemobj_10 SHARED ${SOURCES_10})
-	disable_optimization(pmemobj_10)
-	target_compile_definitions(pmemobj_10 PRIVATE SRCVERSION="${NVML10}")
+	function(build_libpmemobj_10)
+		add_library(pmemobj_10 SHARED ${SOURCES_10})
+		disable_optimization(pmemobj_10)
+		target_compile_definitions(pmemobj_10 PRIVATE SRCVERSION="${VER10}")
 
-	target_include_directories(pmemobj_10 PRIVATE nvml-1.0/src/include)
-	target_include_directories(pmemobj_10 PRIVATE nvml-1.0/src/libpmemobj)
-	target_include_directories(pmemobj_10 PRIVATE nvml-1.0/src/common)
-	target_include_directories(pmemobj_10 PRIVATE ${PMEM_INCLUDE_DIRS})
-	target_link_libraries(pmemobj_10 PRIVATE libpmem-convert)
-	target_link_libraries(pmemobj_10 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-	target_link_libraries(pmemobj_10 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/nvml-1.0/src/libpmemobj/libpmemobj.map)
+		target_include_directories(pmemobj_10 PRIVATE ${VER10}/src/include)
+		target_include_directories(pmemobj_10 PRIVATE ${VER10}/src/libpmemobj)
+		target_include_directories(pmemobj_10 PRIVATE ${VER10}/src/common)
+		target_include_directories(pmemobj_10 PRIVATE ${PMEM_INCLUDE_DIRS})
+		target_link_libraries(pmemobj_10 PRIVATE libpmem-convert)
+		target_link_libraries(pmemobj_10 PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+		target_link_libraries(pmemobj_10 PRIVATE -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/${VER10}/src/libpmemobj/libpmemobj.map)
+	endfunction(build_libpmemobj_10)
+
+	build_libpmemobj_10()
 
 endif(BUILD_CONVERT_V1)
 
 ###################################################### everything else
-if (WIN32)
-	add_executable(pmdk-convert pmdk-convert.c nvml-${MAX_VERSION}/src/windows/getopt/getopt.c)
-	target_include_directories(pmdk-convert PRIVATE nvml-${MAX_VERSION}/src/windows/getopt/)
-	target_include_directories(pmdk-convert PRIVATE nvml-${MAX_VERSION}/src/windows/include/)
-else()
-	add_executable(pmdk-convert pmdk-convert.c)
-endif()
+function(build_pmdk_convert)
+	if (WIN32)
+		add_executable(pmdk-convert pmdk-convert.c ${MAX_STABLE}/src/windows/getopt/getopt.c)
+		target_include_directories(pmdk-convert PRIVATE ${MAX_STABLE}/src/windows/getopt/)
+		target_include_directories(pmdk-convert PRIVATE ${MAX_STABLE}/src/windows/include/)
+	else()
+		add_executable(pmdk-convert pmdk-convert.c)
+	endif()
 
-target_compile_definitions(pmdk-convert PRIVATE LIBDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
-target_compile_definitions(pmdk-convert PRIVATE MIN_VERSION_MAJOR=${MIN_VERSION_MAJOR})
-target_compile_definitions(pmdk-convert PRIVATE MIN_VERSION_MINOR=${MIN_VERSION_MINOR})
-target_compile_definitions(pmdk-convert PRIVATE MAX_VERSION_MAJOR=${MAX_VERSION_MAJOR})
-target_compile_definitions(pmdk-convert PRIVATE MAX_VERSION_MINOR=${MAX_VERSION_MINOR})
-target_link_libraries(pmdk-convert PRIVATE ${CMAKE_DL_LIBS})
-target_link_libraries(pmdk-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+	target_compile_definitions(pmdk-convert PRIVATE LIBDIR="${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
+	target_compile_definitions(pmdk-convert PRIVATE MIN_VERSION_MAJOR=${MIN_VERSION_MAJOR})
+	target_compile_definitions(pmdk-convert PRIVATE MIN_VERSION_MINOR=${MIN_VERSION_MINOR})
+	target_compile_definitions(pmdk-convert PRIVATE MAX_VERSION_MAJOR=${MAX_VERSION_MAJOR})
+	target_compile_definitions(pmdk-convert PRIVATE MAX_VERSION_MINOR=${MAX_VERSION_MINOR})
+	target_compile_definitions(pmdk-convert PRIVATE VERSION_MAJOR=${VERSION_MAJOR})
+	target_compile_definitions(pmdk-convert PRIVATE VERSION_MINOR=${VERSION_MINOR})
+	target_compile_definitions(pmdk-convert PRIVATE VERSION_PATCH=${VERSION_PATCH})
+	target_compile_definitions(pmdk-convert PRIVATE VERSION_PRERELEASE="${VERSION_PRERELEASE}")
+	target_link_libraries(pmdk-convert PRIVATE ${CMAKE_DL_LIBS})
+	target_link_libraries(pmdk-convert PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+endfunction()
+
+build_pmdk_convert()
 
 install(TARGETS pmdk-convert
 	DESTINATION ${CMAKE_INSTALL_BINDIR}

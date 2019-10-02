@@ -1,5 +1,5 @@
 #
-# Copyright 2018-2019, Intel Corporation
+# Copyright 2019, Intel Corporation
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,47 +31,71 @@
 
 include(${SRC_DIR}/helpers.cmake)
 
-# prepare poolset with local replica on DAX devices for testing for each
-# version of PMDK
-function(prepare_files version)
-	file(WRITE ${DIR}/pool${version} "PMEMPOOLSET
-AUTO ${devdax_1}
-REPLICA
-AUTO ${devdax_2}")
-	execute(0 ${CMAKE_CURRENT_BINARY_DIR}/clean_pool ${devdax_1})
-	execute(0 ${CMAKE_CURRENT_BINARY_DIR}/clean_pool ${devdax_2})
-	execute(0 ${CMAKE_CURRENT_BINARY_DIR}/create_${version}
-			${DIR}/pool${version})
-	set(pool_file "${DIR}/pool${version}" PARENT_SCOPE)
-endfunction()
+function(test)
+	check_open(${DIR}/pool15 "1.5 1.6")
 
-function(test_devdax test_intr_tx_devdax)
-	lock_devdax()
-	setup()
+	# 1.5 -> 1.6
+	execute(0 ${EXE_DIR}/pmdk-convert --to=1.6 ${DIR}/pool15 -X fail-safety)
+	check_open(${DIR}/pool15 "1.5 1.6")
 
-	string(REPLACE " " ";" DEVICE_DAX_PATHS ${DEVICE_DAX_PATHS})
-	list(GET DEVICE_DAX_PATHS 0 devdax_1)
-	list(GET DEVICE_DAX_PATHS 1 devdax_2)
-	list(LENGTH VERSIONS num)
-	math(EXPR num "${num} - 1")
-	set(index 1)
+	# 1.6 -> 1.7
+	execute(0 ${EXE_DIR}/pmdk-convert --to=1.7 ${DIR}/pool15 -X fail-safety)
+	check_open(${DIR}/pool15 "1.7")
+endfunction(test)
 
-	while(index LESS num)
-		list(GET VERSIONS ${index} curr_version)
-		math(EXPR next "${index} + 1")
-		list(GET VERSIONS ${next} next_version)
+# single file pool
+setup()
 
-		# DAX devices are supported from PMDK version 1.2
-		if(curr_version VERSION_GREATER "1.1")
-			test_intr_tx_devdax(prepare_files ${curr_version} ${next_version})
-		endif()
+execute(0 ${TEST_DIR}/create_15 ${DIR}/pool15 16)
 
-		MATH(EXPR index "${index} + 1")
-	endwhile()
+test()
 
-	unlock_devdax()
-endfunction()
+# single file poolset
+setup()
 
-test_devdax(test_intr_tx_devdax)
+file(WRITE ${DIR}/pool15 "PMEMPOOLSET\n16M ${DIR}/part15\n")
+
+execute(0 ${TEST_DIR}/create_15 ${DIR}/pool15)
+
+test()
+
+# multi file poolset
+setup()
+
+file(WRITE ${DIR}/pool15 "PMEMPOOLSET\n16M ${DIR}/part15_1\n16M ${DIR}/part15_2\n")
+
+execute(0 ${TEST_DIR}/create_15 ${DIR}/pool15)
+
+test()
+
+# poolset with local replica
+setup()
+
+file(WRITE ${DIR}/pool15 "PMEMPOOLSET\n16M ${DIR}/part15_rep1\nREPLICA\n16M ${DIR}/part15_rep2\n")
+execute(0 ${TEST_DIR}/create_15 ${DIR}/pool15)
+
+test()
+
+# multi file poolset with local replica and SINGLEHDR option
+
+setup()
+
+file(WRITE ${DIR}/pool15
+	"PMEMPOOLSET\n"
+	"OPTION SINGLEHDR\n"
+	"16M ${DIR}/part15_part1_rep1\n"
+	"16M ${DIR}/part15_part2_rep1\n"
+	"REPLICA\n"
+	"16M ${DIR}/part15_part1_rep2\n"
+	"16M ${DIR}/part15_part2_rep2\n")
+
+execute(0 ${TEST_DIR}/create_15 ${DIR}/pool15)
+test()
+
+# invalid pool
+setup()
+
+file(WRITE ${DIR}/not_a_pool "This is not a pool\n")
+execute(15 ${EXE_DIR}/pmdk-convert ${DIR}/not_a_pool -X fail-safety --from 1.5) # CONVERT_FAILED
 
 cleanup()

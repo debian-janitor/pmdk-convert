@@ -45,13 +45,40 @@ mkdir $INSTALL_DIR
 
 cp /opt/pmdk/*.tar.gz .
 
+if [ -n "$CC" ]
+then
+	CC=gcc
+fi
+
 # -----------------------------------------
-# gcc
+# Coverage
+if [[ $COVERAGE -eq 1 ]] ; then
+	mkdir build
+	cd build
+
+	CC=$CC \
+	cmake .. -DCMAKE_BUILD_TYPE=$TEST_BUILD \
+		-DTRACE_TESTS=1 \
+		-DCMAKE_C_FLAGS=-coverage \
+		-DTESTS_USE_FORCED_PMEM=ON
+
+	make -j2
+	ctest --output-on-failure
+	bash <(curl -s https://codecov.io/bash) -c
+
+	cd ..
+
+	rm -r build
+	exit 0
+fi
+
+# -----------------------------------------
+# base build
 
 mkdir build
 cd build
 
-CC=gcc \
+CC=$CC \
 cmake .. -DCMAKE_BUILD_TYPE=$TEST_BUILD \
 	-DDEVELOPER_MODE=1 \
 	-DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
@@ -68,34 +95,15 @@ cd ..
 rm -r build
 
 # -----------------------------------------
-# gcc (different MINVERSION)
+# different MINVERSION
 
 mkdir build
 cd build
 
-CC=gcc \
-  cmake .. -DCMAKE_BUILD_TYPE=$TEST_BUILD \
-  -DDEVELOPER_MODE=1 \
-  -DMIN_VERSION=1.3 \
-  -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
-  -DTRACE_TESTS=1 \
-  -DTESTS_USE_FORCED_PMEM=ON
-
-make -j2
-ctest --output-on-failure
-
-cd ..
-rm -r build
-
-# -----------------------------------------
-# Clang
-
-mkdir build
-cd build
-
-CC=clang \
+CC=$CC \
 cmake .. -DCMAKE_BUILD_TYPE=$TEST_BUILD \
 	-DDEVELOPER_MODE=1 \
+	-DMIN_VERSION=1.3 \
 	-DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
 	-DTRACE_TESTS=1 \
 	-DTESTS_USE_FORCED_PMEM=ON
@@ -107,31 +115,12 @@ cd ..
 rm -r build
 
 # -----------------------------------------
-# Coverage
-if [[ $COVERAGE -eq 1 ]] ; then
-	mkdir build
-	cd build
-
-	CC=gcc \
-	cmake .. -DCMAKE_BUILD_TYPE=$TEST_BUILD \
-		-DTRACE_TESTS=1 \
-		-DCMAKE_C_FLAGS=-coverage\
-		-DTESTS_USE_FORCED_PMEM=ON
-
-	make -j2
-	ctest --output-on-failure
-	bash <(curl -s https://codecov.io/bash) -c
-
-	cd ..
-
-	rm -r build
-fi
-# -----------------------------------------
 # deb & rpm
 
 mkdir build
 cd build
 
+CC=$CC \
 cmake .. -DCMAKE_INSTALL_PREFIX=/usr \
 		-DCPACK_GENERATOR=$PACKAGE_MANAGER \
 		-DCMAKE_BUILD_TYPE=$TEST_BUILD \
@@ -150,10 +139,10 @@ elif [ $PACKAGE_MANAGER = "rpm" ]; then
 fi
 
 cp ./tests/create_10 /tmp
-cp ./tests/open_15 /tmp
+cp ./tests/open_17 /tmp
 cp ./libpmem-convert.so /tmp
 cp ./libpmemobj_10.so /tmp
-cp ./libpmemobj_15.so /tmp
+cp ./libpmemobj_17.so /tmp
 
 cd ..
 rm -rf build
@@ -167,7 +156,7 @@ LD_LIBRARY_PATH=/tmp:$LD_LIBRARY_PATH /tmp/create_10 /tmp/pool 16
 echo "Converting 1.0 pool to the latest version"
 pmdk-convert -X fail-safety -X 1.2-pmemmutex /tmp/pool
 echo "Checking pool works with the latest version"
-LD_LIBRARY_PATH=/tmp:$LD_LIBRARY_PATH /tmp/open_15 /tmp/pool
+LD_LIBRARY_PATH=/tmp:$LD_LIBRARY_PATH /tmp/open_17 /tmp/pool
 echo "OK"
 
 # -----------------------------------------
