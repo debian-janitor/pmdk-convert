@@ -318,42 +318,8 @@ endfunction()
 function(get_pmdk ver hash dstdir)
 	set(pkg ${CMAKE_SOURCE_DIR}/${ver}.tar.gz)
 
-	if (EXISTS ${pkg})
-		file(SHA256 ${pkg} pkg_hash)
-		if (NOT ${pkg_hash} STREQUAL ${hash})
-			message(STATUS "Hash for version ${ver} doesn't match the expected value.")
-			if (EXISTS ${CMAKE_SOURCE_DIR}/${dstdir})
-				message(STATUS "Removing ${CMAKE_SOURCE_DIR}/${dstdir}.")
-				file(REMOVE_RECURSE ${CMAKE_SOURCE_DIR}/${dstdir})
-			endif()
-			message(STATUS "Removing ${pkg}.")
-			file(REMOVE ${pkg})
-		endif()
-	endif()
-
-	if (NOT EXISTS ${pkg})
-		if (EXISTS ${CMAKE_SOURCE_DIR}/${dstdir})
-			message(STATUS "Removing ${CMAKE_SOURCE_DIR}/${dstdir}.")
-			file(REMOVE_RECURSE ${CMAKE_SOURCE_DIR}/${dstdir})
-		endif()
-
-		message(STATUS "Downloading ${ver}.tar.gz")
-		if (${ver} STREQUAL "1.0" OR ${ver} STREQUAL "1.1")
-			file(DOWNLOAD https://github.com/pmem/pmdk/archive/${ver}.tar.gz ${CMAKE_SOURCE_DIR}/${ver}.tar.gz
-				EXPECTED_HASH SHA256=${hash})
-		else()
-			file(DOWNLOAD https://github.com/pmem/pmdk/releases/download/${ver}/pmdk-${ver}.tar.gz ${CMAKE_SOURCE_DIR}/${ver}.tar.gz
-				EXPECTED_HASH SHA256=${hash})
-		endif()
-		message(STATUS "Downloading ${ver}.tar.gz DONE")
-	endif()
-
 	if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${dstdir})
-		message(STATUS "Uncompressing ${ver}.tar.gz")
-		uncompress(${ver}.tar.gz)
-		message(STATUS "Uncompressing ${ver}.tar.gz DONE")
-
-		file(RENAME ${CMAKE_SOURCE_DIR}/pmdk-${ver} ${CMAKE_SOURCE_DIR}/${dstdir})
+		message(FATAL_ERROR "Missing: pmdk ${ver}")
 	endif()
 endfunction()
 
