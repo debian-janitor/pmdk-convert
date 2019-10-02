@@ -19,9 +19,8 @@ Description: convert pmdk/pmemobj pools to a newer on-memory format
  between major releases, and the library doesn't currently support automatic
  conversion.  Such upgrades need to be done manually, by this tool.
  .
- This version supports formats of PMDK up to 1.5 and 1.6 (which are
- compatible and don't need converting).  Upgrades to any prior version
- are supported as well, but no downgrades.
+ This version supports formats of PMDK up to 1.7.  Upgrades to any prior
+ version are supported as well, but no downgrades.
  
 
 # Unusual grammar "on-memory" is intentional here.  Saying "in-memory"
