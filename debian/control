@@ -8,7 +8,7 @@ Build-Depends: debhelper-compat (= 13),
 Standards-Version: 4.4.0
 Rules-Requires-Root: no
 Homepage: https://pmem.io/pmdk-convert/
-Vcs-Git: https://github.com/kilobyte/pmdk-convert -b debian
+Vcs-Git: https://github.com/kilobyte/pmdk-convert.git -b debian
 Vcs-Browser: https://github.com/kilobyte/pmdk-convert/tree/debian
 
 Package: pmdk-convert
