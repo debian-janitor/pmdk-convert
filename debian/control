@@ -2,7 +2,7 @@ Source: pmdk-convert
 Section: libs
 Priority: optional
 Maintainer: Adam Borowski <kilobyte@angband.pl>
-Build-Depends: debhelper-compat (=12),
+Build-Depends: debhelper-compat (= 13),
                cmake,
                gdb,
 Standards-Version: 4.4.0
